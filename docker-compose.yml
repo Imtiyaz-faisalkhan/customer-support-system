@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: customer-support-postgres
+    environment:
+      POSTGRES_DB: customer_support
+      POSTGRES_USER: customer_support
+      POSTGRES_PASSWORD: customer_support
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
