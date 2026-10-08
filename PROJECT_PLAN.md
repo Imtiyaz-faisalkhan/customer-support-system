@@ -37,6 +37,8 @@ Need to build a customer support management system for my busniess where custome
 - Pending Human — AI could not resolve, needs admin attention
 - In Progress — admin is actively working on it
 - Resolved — issue considered solved
+- Tickets display full email thread (customber + agent/AI replies)
+- Agent can reply directly from the ticket UI
 
 ### Dashboard & Metrics
 

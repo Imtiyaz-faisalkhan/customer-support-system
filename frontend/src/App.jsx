@@ -3,6 +3,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import DashboardLayout from './pages/DashboardLayout.jsx'
 import HomePage from './pages/HomePage.jsx'
 import TicketsPage from './pages/TicketsPage.jsx'
+import TicketDetailPage from './pages/TicketDetailPage.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import './App.css'
 
@@ -15,6 +16,7 @@ function App() {
           <Route index element={<Navigate to="home" replace />} />
           <Route path="home" element={<HomePage />} />
           <Route path="tickets" element={<TicketsPage />} />
+          <Route path="tickets/:ticketId" element={<TicketDetailPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

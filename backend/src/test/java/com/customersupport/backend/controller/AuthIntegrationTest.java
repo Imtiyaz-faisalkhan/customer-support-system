@@ -1,4 +1,4 @@
-package com.customersupport.backend.auth;
+package com.customersupport.backend.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,4 +1,4 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 
 function DashboardLayout() {
@@ -13,8 +13,9 @@ function DashboardLayout() {
   return (
     <div className="dashboard">
       <nav className="dashboard-nav">
-        <Link to="/dashboard/home">Home</Link>
-        <Link to="/dashboard/tickets">Tickets</Link>
+        <span className="dashboard-brand">Support Admin</span>
+        <NavLink to="/dashboard/home">Home</NavLink>
+        <NavLink to="/dashboard/tickets">Tickets</NavLink>
         <button type="button" onClick={handleLogout}>
           Logout
         </button>

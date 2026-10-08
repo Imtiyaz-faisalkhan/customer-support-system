@@ -10,6 +10,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     apiMe()
       .then(setUser)
+      .catch((err) => {
+        console.error('Failed to check session', err)
+        setUser(null)
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -26,8 +30,13 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(async () => {
-    await apiLogout()
-    setUser(null)
+    try {
+      await apiLogout()
+    } catch (err) {
+      console.error('Logout request failed, clearing local session anyway', err)
+    } finally {
+      setUser(null)
+    }
   }, [])
 
   return (
