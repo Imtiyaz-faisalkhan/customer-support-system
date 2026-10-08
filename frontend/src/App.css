@@ -546,7 +546,19 @@
 
 .reply-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.reply-count {
+  font-size: 11px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.reply-count-full {
+  color: #b91c1c;
+  font-weight: 500;
 }
 
 .reply-actions .primary-button {

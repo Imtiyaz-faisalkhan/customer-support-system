@@ -139,6 +139,12 @@ class TicketIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
 
+        mockMvc.perform(post("/api/tickets/{id}/replies", id).session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"" + "a".repeat(1001) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("body size must be between 0 and 1000"));
+
         mockMvc.perform(patch("/api/tickets/{id}/status", id).session(session)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"AI_RESPONDED\"}"))

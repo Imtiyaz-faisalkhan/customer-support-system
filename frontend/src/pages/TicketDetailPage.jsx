@@ -10,6 +10,9 @@ import {
   formatDateTime,
 } from '../utils/ticketLabels.js'
 
+// Must match @Size(max = ...) on the backend's ReplyRequest.
+const MAX_REPLY_LENGTH = 1000
+
 function TicketDetailPage() {
   const { ticketId } = useParams()
   const { user } = useAuth()
@@ -167,10 +170,18 @@ function TicketDetailPage() {
         <textarea
           id="reply"
           rows={4}
+          maxLength={MAX_REPLY_LENGTH}
+          aria-describedby="reply-count"
           value={reply}
           onChange={(event) => setReply(event.target.value)}
         />
         <div className="reply-actions">
+          <span
+            id="reply-count"
+            className={`reply-count${reply.length >= MAX_REPLY_LENGTH ? ' reply-count-full' : ''}`}
+          >
+            {reply.length}/{MAX_REPLY_LENGTH}
+          </span>
           <button type="submit" className="primary-button" disabled={sending || !reply.trim()}>
             {sending ? 'Sending...' : 'Send Reply'}
           </button>

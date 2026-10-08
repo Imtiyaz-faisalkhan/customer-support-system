@@ -43,6 +43,18 @@ describe('TicketDetailPage', () => {
     useAuth.mockReturnValue({ user: { username: 'admin' } })
   })
 
+  it('counts reply characters against the 1000 limit', async () => {
+    getTicket.mockResolvedValue(ticket)
+    renderPage()
+    const textarea = await screen.findByLabelText('Reply as admin')
+
+    expect(screen.getByText('0/1000')).toBeInTheDocument()
+    expect(textarea).toHaveAttribute('maxLength', '1000')
+
+    fireEvent.change(textarea, { target: { value: 'Hello' } })
+    expect(screen.getByText('5/1000')).toBeInTheDocument()
+  })
+
   it('shows a sent reply even if the follow-up refresh fails', async () => {
     getTicket.mockResolvedValueOnce(ticket).mockRejectedValueOnce(new Error('Could not load ticket'))
     replyToTicket.mockResolvedValue({
