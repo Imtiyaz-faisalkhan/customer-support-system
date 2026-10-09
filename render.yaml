@@ -1,0 +1,54 @@
+# Render Blueprint (deploy branch only). Setup: docs/DEPLOY_RENDER.md.
+databases:
+  - name: customer-support-db
+    plan: free
+    databaseName: customer_support
+    user: customer_support
+
+services:
+  - type: web
+    name: customer-support
+    runtime: docker
+    plan: free
+    branch: deploy
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: AI_CHAT_PROVIDER
+        value: google-genai
+      - key: DB_HOST
+        fromDatabase:
+          name: customer-support-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: customer-support-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: customer-support-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: customer-support-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: customer-support-db
+          property: password
+      # Secrets: Render asks for these when the Blueprint is created; they never go in the repo.
+      - key: APP_ADMIN_PASSWORD
+        sync: false
+      - key: SUPPORT_EMAIL_ADDRESS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # https://<service>.onrender.com, the address the UI is opened on (CORS).
+      - key: PUBLIC_APP_URL
+        sync: false

@@ -83,6 +83,10 @@ public class SecurityConfig {
                 // The Resend webhook authenticates itself with a signature (ResendWebhookVerifier).
                 .requestMatchers("/", "/api/ping", "/api/health", "/api/auth/login", "/api/webhooks/resend")
                 .permitAll()
+                // The React build, when this app serves it (Render, see SpaController). Only the page shell and
+                // its assets: the data behind it is all under /api.
+                .requestMatchers("/index.html", "/assets/**", "/favicon.svg", "/login", "/dashboard", "/dashboard/**")
+                .permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(handling -> handling.authenticationEntryPoint(entryPoint))

@@ -5,7 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Email settings ({@code app.email.*}). Secrets come from environment variables in application.properties;
  * never commit real values. Which outbound sender is active is chosen by {@code app.email.outbound}
- * ({@code smtp} or {@code log}), see SmtpEmailSender / LoggingEmailSender. Inbound email arrives via Resend.
+ * ({@code smtp}, {@code resend-api} on Render, or {@code log}), see SmtpEmailSender / ResendApiEmailSender /
+ * LoggingEmailSender. Inbound email arrives via Resend.
  */
 @ConfigurationProperties("app.email")
 public record EmailProperties(String supportAddress, String supportName, Resend resend,
@@ -13,7 +14,8 @@ public record EmailProperties(String supportAddress, String supportName, Resend 
 
     /**
      * Resend (resend.com) receiving: {@code webhookSecret} ("whsec_...") verifies the email.received webhook,
-     * {@code apiKey} ("re_...") fetches the full email from {@code apiBaseUrl}. Sending via Resend is plain SMTP.
+     * {@code apiKey} ("re_...") fetches the full email from {@code apiBaseUrl}. Sending is SMTP locally, the API on
+     * Render.
      */
     public record Resend(String apiKey, String webhookSecret, String apiBaseUrl) {
     }

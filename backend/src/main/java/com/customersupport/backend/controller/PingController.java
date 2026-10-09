@@ -9,11 +9,6 @@ import java.util.Map;
 @RestController
 public class PingController {
 
-    @GetMapping("/")
-    public String home() {
-        return "customer support";
-    }
-
     @GetMapping("/api/ping")
     public Map<String, String> ping() {
         return Map.of("status", "ok");
