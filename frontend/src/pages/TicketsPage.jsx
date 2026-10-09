@@ -11,7 +11,7 @@ function TicketsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const status = searchParams.get('status') || ''
   const category = searchParams.get('category') || ''
-  const page = Number(searchParams.get('page')) || 0
+  const page = Math.max(0, Math.floor(Number(searchParams.get('page'))) || 0)
 
   // Each response is tagged with the query that produced it; anything for a different query is stale and
   // hidden, so changing a filter shows "Loading" instead of the previous filter's rows (or an old error).

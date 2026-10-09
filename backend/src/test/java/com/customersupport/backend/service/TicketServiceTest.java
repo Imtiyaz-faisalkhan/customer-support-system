@@ -1,5 +1,6 @@
 package com.customersupport.backend.service;
 
+import com.customersupport.backend.config.EmailProperties;
 import com.customersupport.backend.dto.MessageDto;
 import com.customersupport.backend.dto.OutboundEmail;
 import com.customersupport.backend.entity.Ticket;
@@ -11,6 +12,7 @@ import com.customersupport.backend.repository.TicketRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -37,7 +39,8 @@ class TicketServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TicketService(ticketRepository, emailSender);
+        service = new TicketService(ticketRepository, emailSender,
+                new EmailProperties("support@test.example", "Support", null, null, null));
         ticket = new Ticket("jane@example.com", "Jane", "Billing question");
         ticket.addMessage(MessageAuthor.CUSTOMER, "Why was I charged twice?", Instant.parse("2026-01-01T00:00:00Z"));
     }
@@ -52,8 +55,13 @@ class TicketServiceTest {
         assertThat(ticket.getMessages()).hasSize(2);
         assertThat(ticket.getStatus()).isEqualTo(TicketStatus.IN_PROGRESS);
         assertThat(ticket.getFirstResponseAt()).isNotNull();
-        verify(emailSender).send(new OutboundEmail(
-                "jane@example.com", "Re: Billing question", "We've refunded the duplicate charge."));
+        ArgumentCaptor<OutboundEmail> sent = ArgumentCaptor.forClass(OutboundEmail.class);
+        verify(emailSender).send(sent.capture());
+        assertThat(sent.getValue().to()).isEqualTo("jane@example.com");
+        assertThat(sent.getValue().body()).isEqualTo("We've refunded the duplicate charge.");
+        // Our Message-ID is on our domain and stored on the message, so the customer's reply can find this ticket.
+        assertThat(sent.getValue().messageId()).matches("<[0-9a-f-]+@test\\.example>");
+        assertThat(ticket.getMessages().getLast().getExternalMessageId()).isEqualTo(sent.getValue().messageId());
     }
 
     @Test

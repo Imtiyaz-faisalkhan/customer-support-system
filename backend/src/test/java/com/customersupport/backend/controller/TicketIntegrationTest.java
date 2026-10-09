@@ -7,6 +7,7 @@ import com.customersupport.backend.service.EmailSender;
 import com.customersupport.backend.service.TicketService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -68,8 +69,8 @@ class TicketIntegrationTest {
 
     @Test
     void list_filtersByStatus() throws Exception {
-        Long openId = ticketService.openTicket("a@example.com", "A", "Login issue", "Can't log in").id();
-        Long resolvedId = ticketService.openTicket("b@example.com", "B", "Invoice", "Need an invoice").id();
+        Long openId = ticketService.openTicket("a@example.com", "A", "Login issue", "Can't log in", null).id();
+        Long resolvedId = ticketService.openTicket("b@example.com", "B", "Invoice", "Need an invoice", null).id();
         ticketService.updateStatus(resolvedId, TicketStatus.RESOLVED);
 
         mockMvc.perform(get("/api/tickets").session(session))
@@ -84,7 +85,7 @@ class TicketIntegrationTest {
 
     @Test
     void replyThenStatusChange_showsFullThreadAndSendsEmail() throws Exception {
-        Long id = ticketService.openTicket("jane@example.com", "Jane", "Billing question", "Charged twice").id();
+        Long id = ticketService.openTicket("jane@example.com", "Jane", "Billing question", "Charged twice", null).id();
 
         mockMvc.perform(post("/api/tickets/{id}/replies", id).session(session)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -93,7 +94,11 @@ class TicketIntegrationTest {
                 .andExpect(jsonPath("$.author").value("ADMIN"))
                 .andExpect(jsonPath("$.id").isNumber());
 
-        verify(emailSender).send(new OutboundEmail("jane@example.com", "Re: Billing question", "Refunded the duplicate."));
+        ArgumentCaptor<OutboundEmail> sent = ArgumentCaptor.forClass(OutboundEmail.class);
+        verify(emailSender).send(sent.capture());
+        assertThat(sent.getValue().to()).isEqualTo("jane@example.com");
+        assertThat(sent.getValue().subject()).isEqualTo("Re: Billing question [#" + id + "]");
+        assertThat(sent.getValue().body()).isEqualTo("Refunded the duplicate.");
 
         mockMvc.perform(patch("/api/tickets/{id}/status", id).session(session)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -116,7 +121,7 @@ class TicketIntegrationTest {
 
     @Test
     void replyWithoutStatusChange_stillBumpsUpdatedAt() {
-        Long id = ticketService.openTicket("jane@example.com", "Jane", "Hello", "Hi").id();
+        Long id = ticketService.openTicket("jane@example.com", "Jane", "Hello", "Hi", null).id();
         ticketService.reply(id, "First reply");  // OPEN -> IN_PROGRESS
         Instant afterFirstReply = ticketService.get(id).updatedAt();
 
@@ -127,7 +132,7 @@ class TicketIntegrationTest {
 
     @Test
     void invalidRequests_returnErrors() throws Exception {
-        Long id = ticketService.openTicket("jane@example.com", "Jane", "Hello", "Hi").id();
+        Long id = ticketService.openTicket("jane@example.com", "Jane", "Hello", "Hi", null).id();
 
         mockMvc.perform(get("/api/tickets/{id}", 999_999).session(session))
                 .andExpect(status().isNotFound())

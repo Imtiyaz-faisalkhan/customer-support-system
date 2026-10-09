@@ -1,5 +1,6 @@
 package com.customersupport.backend.service;
 
+import com.customersupport.backend.config.EmailProperties;
 import com.customersupport.backend.dto.MessageDto;
 import com.customersupport.backend.dto.OutboundEmail;
 import com.customersupport.backend.dto.PageResponse;
@@ -19,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -31,17 +35,39 @@ public class TicketService {
 
     private final TicketRepository ticketRepository;
     private final EmailSender emailSender;
+    private final EmailProperties emailProperties;
 
-    public TicketService(TicketRepository ticketRepository, EmailSender emailSender) {
+    public TicketService(TicketRepository ticketRepository, EmailSender emailSender, EmailProperties emailProperties) {
         this.ticketRepository = ticketRepository;
         this.emailSender = emailSender;
+        this.emailProperties = emailProperties;
     }
 
-    /** Creates a new OPEN ticket from an inbound customer email. Entry point for the future webhook. */
-    public TicketDetail openTicket(String customerEmail, String customerName, String subject, String body) {
+    /**
+     * Creates a new OPEN ticket from an inbound customer email (see InboundEmailService).
+     *
+     * @param externalMessageId the email's Message-ID, or null
+     */
+    public TicketDetail openTicket(String customerEmail, String customerName, String subject, String body,
+                                   String externalMessageId) {
         Ticket ticket = new Ticket(customerEmail, customerName, subject);
-        ticket.addMessage(MessageAuthor.CUSTOMER, body, Instant.now());
+        ticket.addMessage(MessageAuthor.CUSTOMER, body, Instant.now(), externalMessageId);
         return TicketDetail.from(ticketRepository.save(ticket));
+    }
+
+    /**
+     * Appends a customer's emailed reply to their ticket. A reply to a RESOLVED or AI_RESPONDED ticket means the
+     * customer isn't satisfied, so it goes back to PENDING_HUMAN; other statuses are already with the admin.
+     */
+    public MessageDto appendCustomerReply(Long ticketId, String body, String externalMessageId) {
+        Ticket ticket = findTicket(ticketId);
+        Instant now = Instant.now();
+        TicketMessage message = ticket.addMessage(MessageAuthor.CUSTOMER, body, now, externalMessageId);
+        if (ticket.getStatus() == TicketStatus.RESOLVED || ticket.getStatus() == TicketStatus.AI_RESPONDED) {
+            ticket.changeStatus(TicketStatus.PENDING_HUMAN, now);
+        }
+        ticketRepository.flush();
+        return MessageDto.from(message);
     }
 
     @Transactional(readOnly = true)
@@ -70,21 +96,46 @@ public class TicketService {
     public MessageDto reply(Long id, String body) {
         Ticket ticket = findTicket(id);
         Instant now = Instant.now();
-        TicketMessage message = ticket.addMessage(MessageAuthor.ADMIN, body, now);
+        // Threading: In-Reply-To = the customer's latest email, References = every earlier email in the thread.
+        String inReplyTo = latestCustomerMessageId(ticket);
+        String references = threadReferences(ticket);
+        String messageId = "<" + UUID.randomUUID() + "@" + emailProperties.domain() + ">";
+        TicketMessage message = ticket.addMessage(MessageAuthor.ADMIN, body, now, messageId);
         if (ticket.getStatus() != TicketStatus.RESOLVED) {
             ticket.changeStatus(TicketStatus.IN_PROGRESS, now);
         }
         // Flush (not save, whose cascaded merge would persist a copy) so the returned message gets its id.
         ticketRepository.flush();
-        emailSender.send(new OutboundEmail(ticket.getCustomerEmail(), replySubject(ticket.getSubject()), body));
+        emailSender.send(new OutboundEmail(ticket.getCustomerEmail(), replySubject(ticket), body,
+                messageId, inReplyTo, references));
         return MessageDto.from(message);
+    }
+
+    private static String latestCustomerMessageId(Ticket ticket) {
+        return ticket.getMessages().reversed().stream()
+                .filter(m -> m.getAuthor() == MessageAuthor.CUSTOMER && m.getExternalMessageId() != null)
+                .map(TicketMessage::getExternalMessageId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String threadReferences(Ticket ticket) {
+        String references = ticket.getMessages().stream()
+                .map(TicketMessage::getExternalMessageId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining(" "));
+        return references.isEmpty() ? null : references;
     }
 
     private Ticket findTicket(Long id) {
         return ticketRepository.findById(id).orElseThrow(() -> new TicketNotFoundException(id));
     }
 
-    private static String replySubject(String subject) {
-        return subject.regionMatches(true, 0, "Re:", 0, 3) ? subject : "Re: " + subject;
+    /** "Re: <subject> [#id]"; the [#id] tag lets InboundEmailService match a reply even without threading headers. */
+    private static String replySubject(Ticket ticket) {
+        String subject = ticket.getSubject();
+        String reply = subject.regionMatches(true, 0, "Re:", 0, 3) ? subject : "Re: " + subject;
+        String tag = "[#" + ticket.getId() + "]";
+        return reply.contains(tag) ? reply : reply + " " + tag;
     }
 }

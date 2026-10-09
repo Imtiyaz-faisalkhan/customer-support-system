@@ -79,7 +79,9 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers("/", "/api/ping", "/api/health", "/api/auth/login").permitAll()
+                // Email webhooks authenticate themselves: SendGrid via Basic creds, Resend via its signature.
+                .requestMatchers("/", "/api/ping", "/api/health", "/api/auth/login", "/api/webhooks/sendgrid/**",
+                        "/api/webhooks/resend").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(handling -> handling.authenticationEntryPoint(entryPoint))

@@ -566,6 +566,294 @@
   padding: 7px 14px;
 }
 
+/* Dashboard */
+
+.error-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.error-with-action button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #fff;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dashboard-header .page-title {
+  margin-bottom: 2px;
+}
+
+.dashboard-header .muted {
+  font-size: 12px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.segmented button {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.segmented button:hover:not(.active) {
+  background: #f3f4f6;
+}
+
+.segmented button.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.dashboard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 150ms ease;
+}
+
+/* Refetch keeps the previous render on screen, dimmed, instead of a skeleton or a layout jump. */
+.dashboard-body.is-refreshing {
+  opacity: 0.5;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-tile {
+  padding: 14px 16px;
+}
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.25;
+  margin: 4px 0 2px;
+}
+
+.stat-detail {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.chart-card {
+  padding: 14px 16px;
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 12px;
+  letter-spacing: normal;
+  line-height: 1.4;
+}
+
+.chart-frame {
+  margin-left: -8px;
+}
+
+.chart-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+  font-size: 12px;
+}
+
+.chart-tooltip strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.chart-tooltip span {
+  color: #6b7280;
+}
+
+.chart-table {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.chart-table summary {
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.chart-table table {
+  margin-top: 8px;
+  border-collapse: collapse;
+  min-width: 220px;
+}
+
+.chart-table th,
+.chart-table td {
+  text-align: left;
+  padding: 3px 12px 3px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.chart-table .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.breakdown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.breakdown li {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.breakdown-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.breakdown-bar {
+  height: 12px;
+  border-radius: 0 4px 4px 0;
+}
+
+.breakdown-value {
+  font-size: 12px;
+  color: #374151;
+  font-variant-numeric: tabular-nums;
+}
+
+.stacked-bar {
+  display: flex;
+  gap: 2px;
+  height: 16px;
+  margin-bottom: 14px;
+}
+
+.stacked-segment {
+  flex-basis: 0;
+  min-width: 4px;
+}
+
+.stacked-segment:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.stacked-segment:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.stacked-segment:only-child {
+  border-radius: 4px;
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legend-label {
+  color: #374151;
+}
+
+.legend-value {
+  margin-left: auto;
+  color: #111827;
+  font-weight: 500;
+}
+
+.handled-note {
+  font-size: 11px;
+  margin-top: 12px;
+}
+
+@media (max-width: 1000px) {
+  .kpi-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
   .tickets-table th:nth-child(5),
   .tickets-table td:nth-child(5) {

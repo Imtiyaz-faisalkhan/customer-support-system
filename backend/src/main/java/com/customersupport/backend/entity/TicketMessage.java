@@ -9,6 +9,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -19,7 +20,9 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 @Entity
-@Table(name = "ticket_messages")
+// Unique: an email Message-ID identifies exactly one message (dedupes SendGrid webhook retries). NULLs allowed.
+@Table(name = "ticket_messages",
+        indexes = @Index(name = "ux_ticket_messages_external_message_id", columnList = "externalMessageId", unique = true))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TicketMessage {
@@ -42,13 +45,14 @@ public class TicketMessage {
     @Column(nullable = false)
     private Instant createdAt;
 
-    /** Provider message id (e.g. RFC 5322 Message-ID), reserved for threading inbound/outbound email. */
+    /** RFC 5322 Message-ID incl. angle brackets (e.g. "<abc@mail.gmail.com>") of the email this message was. */
     private String externalMessageId;
 
-    TicketMessage(Ticket ticket, MessageAuthor author, String body, Instant createdAt) {
+    TicketMessage(Ticket ticket, MessageAuthor author, String body, Instant createdAt, String externalMessageId) {
         this.ticket = ticket;
         this.author = author;
         this.body = body;
         this.createdAt = createdAt;
+        this.externalMessageId = externalMessageId;
     }
 }

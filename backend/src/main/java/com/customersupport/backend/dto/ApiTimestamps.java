@@ -9,12 +9,12 @@ import java.time.ZoneId;
  * every timestamp as a UTC Instant instead, so clients never have to guess the server's zone and all
  * timestamps in a response (message times, firstResponseAt, ...) are directly comparable.
  */
-final class ApiTimestamps {
+public final class ApiTimestamps {
 
     private ApiTimestamps() {
     }
 
-    static Instant toInstant(LocalDateTime serverLocal) {
+    public static Instant toInstant(LocalDateTime serverLocal) {
         return serverLocal == null ? null : serverLocal.atZone(ZoneId.systemDefault()).toInstant();
     }
 }

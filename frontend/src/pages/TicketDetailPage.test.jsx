@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import TicketDetailPage from './TicketDetailPage.jsx'
-import { getTicket, replyToTicket } from '../api/tickets.js'
+import { getTicket, replyToTicket, updateTicketStatus } from '../api/tickets.js'
 import { useAuth } from '../context/AuthContext.jsx'
 
 vi.mock('../api/tickets.js', () => ({
@@ -53,6 +53,32 @@ describe('TicketDetailPage', () => {
 
     fireEvent.change(textarea, { target: { value: 'Hello' } })
     expect(screen.getByText('5/1000')).toBeInTheDocument()
+  })
+
+  it('ignores an older background refresh that finishes after a newer one', async () => {
+    const reply = { id: 2, author: 'ADMIN', body: 'On it.', createdAt: '2026-10-04T11:00:00Z' }
+    let resolveStaleRefresh
+    getTicket
+      .mockResolvedValueOnce(ticket) // initial load
+      .mockReturnValueOnce(new Promise((resolve) => (resolveStaleRefresh = resolve))) // after status change: slow
+      .mockResolvedValueOnce({ ...ticket, status: 'IN_PROGRESS', messages: [...ticket.messages, reply] }) // after reply
+    // PATCH /status returns a TicketSummary: same fields minus the thread.
+    const { messages: _thread, ...summary } = ticket
+    updateTicketStatus.mockResolvedValue({ ...summary, status: 'IN_PROGRESS' })
+    replyToTicket.mockResolvedValue(reply)
+    renderPage()
+    await screen.findByText('The export is missing orders.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'In Progress' }))
+    await screen.findByRole('button', { name: 'Resolved' })
+    fireEvent.change(screen.getByLabelText('Reply as admin'), { target: { value: 'On it.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reply' }))
+    expect(await screen.findByText('On it.')).toBeInTheDocument()
+
+    // The status change's refresh (taken before the reply existed) finally arrives - it must not win.
+    await act(async () => resolveStaleRefresh(ticket))
+
+    expect(screen.getByText('On it.')).toBeInTheDocument()
   })
 
   it('shows a sent reply even if the follow-up refresh fails', async () => {

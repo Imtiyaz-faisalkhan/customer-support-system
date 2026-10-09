@@ -17,7 +17,7 @@ test.describe('authentication', () => {
     await expect(page).toHaveURL(/\/dashboard\/home$/)
     await expect(page.getByRole('link', { name: 'Home' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Tickets' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
     // Clicking Tickets shows the tickets page.
     await page.getByRole('link', { name: 'Tickets' }).click()

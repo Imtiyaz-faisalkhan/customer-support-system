@@ -17,6 +17,8 @@ Working notes carried across review sessions. Read at the start of every review,
 
 - Accepted (2026-10 review): OPEN/AI_RESPONDED system-only statuses; LoggingEmailSender stub; no inbound webhook yet; DemoTicketSeeder on via `app.demo-data.enabled=true` in main application.properties; local Postgres column-type mismatch after Instant->LocalDateTime switch (user drops tables).
 - AuthControllerTest clearing SecurityContextHolder in @AfterEach is an intentional thread-local leak fix.
+- Accepted (2026-10 dashboard review): no dashboard auto-refresh; single-hue breakdown bars + 2-segment stacked AI/human bar (dataviz skill); metrics aggregated in Java not SQL GROUP BY (documented in CLAUDE.md); local Postgres keeps timestamptz for Ticket.createdAt/updatedAt (works, pgjdbc uses JVM zone).
+- Dashboard metrics cover tickets *created* in the window (current status/category); bucket dates are server-local. Documented in CLAUDE.md "Dashboard metrics".
 
 ## Codebase facts
 
@@ -26,8 +28,15 @@ Working notes carried across review sessions. Read at the start of every review,
 
 ## Recurring issues seen across reviews
 
-- Mixed LocalDateTime/Instant timestamps (flagged 2026-10, lower-confidence on intent).
-- DTO mappers calling getMessages().size() load full message bodies just to count (TicketSummary.messageCount, unused by UI).
+- Mixed LocalDateTime/Instant timestamps: resolved by ApiTimestamps.toInstant in DTOs (all API timestamps UTC `Z`); verified 2026-10.
+- Fixed and verified 2026-10: messageCount removed from TicketSummary; Link stopPropagation in TicketsPage rows; TicketsPage query-tagged responses; TicketDetailPage applies action response then refreshQuietly().
+- Pattern: "keep previous response, tag with period/query" state in pages. Watch the error path (stale data shown undimmed under a new label) and races between multiple un-cancelled refetches.
+- Flagged 2026-10: MetricsService counts AI-replied-then-escalated (PENDING_HUMAN, no admin msg) tickets as "AI handled", contradicting PROJECT_PLAN's Pending Human definition.
+
+## Environment facts
+
+- Live JVM zone is UTC+2 (CEST); dashboard `from` shows 22:00Z. Seeded live DB has 9 tickets; ticket 6 is the AI->customer follow-up->PENDING_HUMAN case.
+- target/surefire-reports contains stale reports from the old auth/ and ticket/ test packages; check timestamps before trusting them.
 
 ## False positives the user has dismissed
 

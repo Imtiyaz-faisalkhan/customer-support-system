@@ -2,6 +2,7 @@ package com.customersupport.backend.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.mail.MailException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -34,6 +35,13 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         return Map.of("error", message.isEmpty() ? "Invalid request" : message);
+    }
+
+    // The reply is rolled back when sending fails, so the admin can safely retry.
+    @ExceptionHandler(MailException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public Map<String, String> mailFailed(MailException ex) {
+        return Map.of("error", "Could not send the email to the customer, so the reply was not saved. Try again.");
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})

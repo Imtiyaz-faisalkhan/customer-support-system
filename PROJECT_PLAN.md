@@ -40,13 +40,13 @@ Need to build a customer support management system for my busniess where custome
 - Tickets display full email thread (customber + agent/AI replies)
 - Agent can reply directly from the ticket UI
 
-### Dashboard & Metrics
+### Dashboard
 
+- Total tickets(daily/weekly)
+- Tickets breakdown by status and category
+- AI vs human handled ratio
 - Average response time
-- Total tickets received per day
-- Ticket counts by status (Open, Pending Human, Resolved, etc.)
-- Ticket counts by category/bucket
-- Simple charts/graphs for the above trends over time
+- Resolution rate
 
 ### Security
 

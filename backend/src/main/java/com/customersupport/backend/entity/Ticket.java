@@ -79,7 +79,12 @@ public class Ticket {
     }
 
     public TicketMessage addMessage(MessageAuthor author, String body, Instant now) {
-        TicketMessage message = new TicketMessage(this, author, body, now);
+        return addMessage(author, body, now, null);
+    }
+
+    /** @param externalMessageId the email Message-ID this message was sent/received as, or null */
+    public TicketMessage addMessage(MessageAuthor author, String body, Instant now, String externalMessageId) {
+        TicketMessage message = new TicketMessage(this, author, body, now, externalMessageId);
         messages.add(message);
         if (author != MessageAuthor.CUSTOMER && firstResponseAt == null) {
             firstResponseAt = now;

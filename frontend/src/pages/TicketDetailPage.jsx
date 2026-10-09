@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getTicket, replyToTicket, updateTicketStatus } from '../api/tickets.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -43,10 +43,15 @@ function TicketDetailPage() {
   // After a successful action, its own response is applied immediately; this re-fetch only fills in the
   // fields it doesn't return (e.g. status/updatedAt after a reply). A failure here must not look like the
   // action failed (a reply has already been emailed), so it's ignored and the page keeps what it has.
-  const refreshQuietly = () =>
+  // Refreshes can overlap (e.g. a status change then a quick reply); only the latest may apply, otherwise an
+  // older response could overwrite newer state and hide a just-sent reply.
+  const latestRefresh = useRef(0)
+  const refreshQuietly = () => {
+    const refreshId = ++latestRefresh.current
     getTicket(ticketId)
-      .then(setTicket)
+      .then((fresh) => refreshId === latestRefresh.current && setTicket(fresh))
       .catch(() => {})
+  }
 
   const handleStatusChange = async (status) => {
     setActionError(null)
