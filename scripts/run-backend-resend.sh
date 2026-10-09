@@ -29,7 +29,7 @@ if [[ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_AGAIN" ]]; then
   exit 1
 fi
 
-read -r -s -p "Gemini API key for AI categorization (from Google AI Studio, empty = no AI): " GEMINI_API_KEY; echo
+read -r -s -p "Gemini API key for AI categorization + auto-reply (from Google AI Studio, empty = no AI): " GEMINI_API_KEY; echo
 
 case "$RESEND_API_KEY" in re_*) ;; *) echo "That doesn't look like a Resend API key (should start with re_)." >&2; exit 1 ;; esac
 case "$RESEND_WEBHOOK_SECRET" in whsec_*) ;; *) echo "The signing secret should start with whsec_." >&2; exit 1 ;; esac

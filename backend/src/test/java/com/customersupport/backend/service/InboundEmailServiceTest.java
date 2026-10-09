@@ -42,12 +42,15 @@ class InboundEmailServiceTest {
     @Mock
     private TicketCategorizer categorizer;
 
+    @Mock
+    private AutoReplyService autoReplyService;
+
     private InboundEmailService service;
 
     @BeforeEach
     void setUp() {
         service = new InboundEmailService(ticketService, ticketRepository, messageRepository,
-                new EmailProperties("support@test.example", "Support", null, false), categorizer);
+                new EmailProperties("support@test.example", "Support", null, false), categorizer, autoReplyService);
     }
 
     private static InboundEmail email(String from, String subject, String messageId, List<String> threadIds) {
@@ -69,6 +72,7 @@ class InboundEmailServiceTest {
         InboundEmailService.Result result = service.receive(email("jane@example.com", "Invoice", "<m1@x>", List.of()));
 
         assertThat(result).isEqualTo(new InboundEmailService.Result(Outcome.CREATED, 7L));
+        verify(autoReplyService).replyAsync(7L, "Invoice", "Hello");
     }
 
     @Test
@@ -82,6 +86,8 @@ class InboundEmailServiceTest {
 
         assertThat(result).isEqualTo(new InboundEmailService.Result(Outcome.APPENDED, 3L));
         verify(ticketService).appendCustomerReply(3L, "Hello", "<m2@x>");
+        // Only a new ticket gets an AI reply; a customer's follow-up is for the admin.
+        verifyNoInteractions(autoReplyService);
     }
 
     @Test

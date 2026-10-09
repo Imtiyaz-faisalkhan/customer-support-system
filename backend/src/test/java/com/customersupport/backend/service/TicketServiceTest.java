@@ -102,6 +102,60 @@ class TicketServiceTest {
     }
 
     @Test
+    void sendAiReply_appendsAiMessageWithFooter_sendsEmail_andMovesToAiResponded() {
+        when(ticketRepository.findById(1L)).thenReturn(Optional.of(ticket));
+
+        assertThat(service.sendAiReply(1L, "Please send us your order ID.\n")).isTrue();
+
+        assertThat(ticket.getStatus()).isEqualTo(TicketStatus.AI_RESPONDED);
+        assertThat(ticket.getFirstResponseAt()).isNotNull();
+        assertThat(ticket.getMessages().getLast().getAuthor()).isEqualTo(MessageAuthor.AI);
+        ArgumentCaptor<OutboundEmail> sent = ArgumentCaptor.forClass(OutboundEmail.class);
+        verify(emailSender).send(sent.capture());
+        assertThat(sent.getValue().autoReply()).isTrue();
+        assertThat(sent.getValue().body())
+                .isEqualTo("Please send us your order ID.\n\n" + TicketService.AI_REPLY_FOOTER)
+                .isEqualTo(ticket.getMessages().getLast().getBody());
+        assertThat(sent.getValue().subject()).isEqualTo("Re: Billing question " + ticket.replyTag());
+        assertThat(ticket.getMessages().getLast().getExternalMessageId()).isEqualTo(sent.getValue().messageId());
+    }
+
+    @Test
+    void sendAiReply_whenTheAdminAlreadyAnswered_doesNothing() {
+        when(ticketRepository.findById(1L)).thenReturn(Optional.of(ticket));
+        service.reply(1L, "On it.");
+
+        assertThat(service.sendAiReply(1L, "Late AI answer")).isFalse();
+        assertThat(service.escalateToHuman(1L)).isFalse();
+
+        assertThat(ticket.getMessages()).hasSize(2);
+        assertThat(ticket.getStatus()).isEqualTo(TicketStatus.IN_PROGRESS);
+    }
+
+    @Test
+    void sendAiReply_whenTheCustomerWroteAgainMeanwhile_isSkipped_andTheTicketCanBeEscalated() {
+        when(ticketRepository.findById(1L)).thenReturn(Optional.of(ticket));
+        service.appendCustomerReply(1L, "Also, I was charged a third time.", "<m2@x>");
+
+        assertThat(service.sendAiReply(1L, "Answer to the first email only")).isFalse();
+        assertThat(service.escalateToHuman(1L)).isTrue();
+
+        assertThat(ticket.getStatus()).isEqualTo(TicketStatus.PENDING_HUMAN);
+        verifyNoInteractions(emailSender);
+    }
+
+    @Test
+    void escalateToHuman_movesOpenTicketToPendingHuman_withoutEmail() {
+        when(ticketRepository.findById(1L)).thenReturn(Optional.of(ticket));
+
+        assertThat(service.escalateToHuman(1L)).isTrue();
+
+        assertThat(ticket.getStatus()).isEqualTo(TicketStatus.PENDING_HUMAN);
+        assertThat(ticket.getMessages()).hasSize(1);
+        verifyNoInteractions(emailSender);
+    }
+
+    @Test
     void updateStatus_toSystemOnlyStatus_isRejected() {
         assertThatThrownBy(() -> service.updateStatus(1L, TicketStatus.OPEN))
                 .isInstanceOf(InvalidStatusTransitionException.class);

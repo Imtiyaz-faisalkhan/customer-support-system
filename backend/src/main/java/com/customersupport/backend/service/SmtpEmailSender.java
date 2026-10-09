@@ -55,6 +55,10 @@ public class SmtpEmailSender implements EmailSender {
             if (email.references() != null) {
                 message.setHeader("References", email.references());
             }
+            if (email.autoReply()) {
+                // Tells vacation responders and other helpdesks not to answer, so two systems can't loop.
+                message.setHeader("Auto-Submitted", "auto-replied");
+            }
         } catch (MessagingException | UnsupportedEncodingException ex) {
             throw new MailPreparationException("Could not build email to " + email.to(), ex);
         }

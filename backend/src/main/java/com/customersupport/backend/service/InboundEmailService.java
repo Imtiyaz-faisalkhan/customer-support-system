@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
 
 /**
  * Decides what an inbound customer email becomes: a new ticket, a reply on an existing ticket, or nothing
- * (duplicate delivery, auto-reply, our own mail). All ticket writes go through TicketService, each in its own
+ * (duplicate delivery, auto-reply, our own mail). A new ticket then gets the AI's knowledge-base reply or is escalated
+ * (AutoReplyService); replies on existing tickets never do. All ticket writes go through TicketService, each in its own
  * transaction. Deliberately not @Transactional itself: a new ticket is categorized by AI first, and that call
  * (seconds) must not hold a database connection.
  */
@@ -37,15 +38,17 @@ public class InboundEmailService {
     private final TicketMessageRepository messageRepository;
     private final EmailProperties emailProperties;
     private final TicketCategorizer categorizer;
+    private final AutoReplyService autoReplyService;
 
     public InboundEmailService(TicketService ticketService, TicketRepository ticketRepository,
                                TicketMessageRepository messageRepository, EmailProperties emailProperties,
-                               TicketCategorizer categorizer) {
+                               TicketCategorizer categorizer, AutoReplyService autoReplyService) {
         this.ticketService = ticketService;
         this.ticketRepository = ticketRepository;
         this.messageRepository = messageRepository;
         this.emailProperties = emailProperties;
         this.categorizer = categorizer;
+        this.autoReplyService = autoReplyService;
     }
 
     public Result receive(InboundEmail email) {
@@ -72,6 +75,8 @@ public class InboundEmailService {
         TicketCategory category = categorizer.categorize(email.subject(), email.body()).orElse(null);
         Long ticketId = ticketService.openTicket(email.fromAddress(), email.fromName(), email.subject(),
                 email.body(), email.messageId(), category).id();
+        // In the background: the knowledge-base answer can take longer than Resend waits for this webhook.
+        autoReplyService.replyAsync(ticketId, email.subject(), email.body());
         return new Result(Outcome.CREATED, ticketId);
     }
 

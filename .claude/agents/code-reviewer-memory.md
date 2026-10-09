@@ -38,7 +38,9 @@ Working notes carried across review sessions. Read at the start of every review,
 - Pattern: "keep previous response, tag with period/query" state in pages. Watch the error path (stale data shown undimmed under a new label) and races between multiple un-cancelled refetches.
 - Flagged 2026-10 (Resend review): default admin pw usable over tunnel; Vite dev server public; ResendClient no timeouts; null Message-ID breaks dedupe; From-spoofing vs [#id] guard; stale EMAIL_INBOUND export; demo seeder on in Resend mode; parser leftover Function indirection. Check status next review.
 
-- AI categorization (2026-10, commit eea4d2a): Spring AI 2.0.1 google-genai; TicketOpenedEvent -> @Async @TransactionalEventListener(AFTER_COMMIT) listener -> TicketCategorizer -> applyAiCategory (null-only). Settled, don't flag: no tests for AI categorizer/listener, no backfill/retry, categorization doesn't change status.
+- AI categorization (corrected 2026-10, commit 82db2aa): now SYNCHRONOUS in InboundEmailService before openTicket(..., category) (10s limit); the old event listener/applyAiCategory is gone. Settled, don't flag: no AI tests, no backfill/retry, categorization doesn't change status.
+- AI auto-reply (2026-10 review, uncommitted then): AutoReplyService.replyAsync (own virtual-thread executor) after openTicket -> KnowledgeBaseResponder -> TicketService.sendAiReply / escalateToHuman, guarded by OPEN && firstResponseAt==null. User-approved, don't flag: async design, AI off -> stays OPEN, restart leaves OPEN, no live-AI tests, refund-style requests get KB next step.
+- Spring AI 2.0.1 (verified in bytecode): DefaultChatClientUtils renders system/user text via PromptTemplate ONLY when params are non-empty; structured-output format is added by ChatModelCallAdvisor.augmentWithFormatInstructions, so `{}` in KB/email text is safe.
 - Spring AI 2.0.1 google-genai props: `spring.ai.google.genai.chat.<opt>` is current; `chat.options.<opt>` is deprecated (verified in jar metadata). Retry via core RetryTemplate.
 - Ticket has no @Version/@DynamicUpdate: Hibernate UPDATE writes every column (seen in test SQL log), so concurrent short transactions can lost-update each other.
 - Flagged 2026-10 (AI review): model in application.properties (gemini-3.8-flash) != docs/commit (gemini-2.5-flash); EMAIL_SETUP privacy claim overstated (signatures in body); AI applyAiCategory full-row lost update; script AI toggle leaks from earlier shell export. Check status next review.
@@ -47,6 +49,8 @@ Working notes carried across review sessions. Read at the start of every review,
 
 - Live JVM zone is UTC+2 (CEST); dashboard `from` shows 22:00Z. Seeded live DB had 9 demo tickets (@example.com) and is the same DB the Resend run uses; ticket 6 is the AI->customer follow-up->PENDING_HUMAN case.
 - target/surefire-reports contains stale reports from the old auth/ and ticket/ test packages; check timestamps before trusting them.
+
+- Flagged 2026-10 (auto-reply review): forged From -> automatic AI email to any third party, no rate limit (EMAIL_SETUP security note stale); customer follow-up during AI thinking gets masked by AI_RESPONDED; no @Version race admin vs AI reply; no Auto-Submitted: auto-replied on AI replies; </email> delimiter not neutralized; wrong CLAUDE.md template-rendering note. Check status next review.
 
 ## False positives the user has dismissed
 

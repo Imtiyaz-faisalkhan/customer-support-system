@@ -39,6 +39,10 @@ public class TicketService {
     private static final Set<String> RESERVED_DOMAINS = Set.of("example.com", "example.net", "example.org");
     private static final List<String> RESERVED_TLDS = List.of(".test", ".example", ".invalid", ".localhost");
 
+    /** Appended to AI replies: says they're automated, and that replying reaches a person (→ PENDING_HUMAN). */
+    static final String AI_REPLY_FOOTER = "This is an automated reply based on our help articles. If it doesn't "
+            + "solve your issue, just reply to this email and a member of our team will help.";
+
     private final TicketRepository ticketRepository;
     private final EmailSender emailSender;
     private final EmailProperties emailProperties;
@@ -115,6 +119,48 @@ public class TicketService {
      */
     public MessageDto reply(Long id, String body) {
         Ticket ticket = findTicket(id);
+        TicketStatus newStatus = ticket.getStatus() == TicketStatus.RESOLVED ? TicketStatus.RESOLVED
+                : TicketStatus.IN_PROGRESS;
+        return MessageDto.from(sendReply(ticket, MessageAuthor.ADMIN, body, newStatus, false));
+    }
+
+    /**
+     * The AI's answer from the knowledge base (see AutoReplyService): appended with a note that it is automated,
+     * emailed like an admin reply, and the ticket becomes AI_RESPONDED. Does nothing, and returns false, if the
+     * ticket is no longer awaiting its first response (e.g. the admin answered while the AI was thinking) or the
+     * customer sent another email meanwhile, which the AI's answer doesn't cover.
+     */
+    public boolean sendAiReply(Long id, String body) {
+        Ticket ticket = findTicket(id);
+        if (!awaitingFirstResponse(ticket) || ticket.getMessages().size() != 1) {
+            return false;
+        }
+        sendReply(ticket, MessageAuthor.AI, body.strip() + "\n\n" + AI_REPLY_FOOTER, TicketStatus.AI_RESPONDED,
+                true);
+        return true;
+    }
+
+    /** The AI couldn't answer a new ticket: hand it to the admin. False if it's no longer awaiting a first response. */
+    public boolean escalateToHuman(Long id) {
+        Ticket ticket = findTicket(id);
+        if (!awaitingFirstResponse(ticket)) {
+            return false;
+        }
+        ticket.changeStatus(TicketStatus.PENDING_HUMAN, Instant.now());
+        return true;
+    }
+
+    private static boolean awaitingFirstResponse(Ticket ticket) {
+        return ticket.getStatus() == TicketStatus.OPEN && ticket.getFirstResponseAt() == null;
+    }
+
+    /**
+     * Appends our reply, sets the status and emails it, threaded onto the customer's emails.
+     *
+     * @param autoReply marks the email as automated (RFC 3834), so other systems' auto-responders don't answer it
+     */
+    private TicketMessage sendReply(Ticket ticket, MessageAuthor author, String body, TicketStatus newStatus,
+                                    boolean autoReply) {
         if (emailProperties.rejectReservedRecipients() && isReservedAddress(ticket.getCustomerEmail())) {
             // Such a reply would bounce, and bounces hurt the sending domain's reputation with real email.
             throw new UndeliverableRecipientException(ticket.getCustomerEmail()
@@ -125,15 +171,13 @@ public class TicketService {
         String inReplyTo = latestCustomerMessageId(ticket);
         String references = threadReferences(ticket);
         String messageId = "<" + UUID.randomUUID() + "@" + emailProperties.domain() + ">";
-        TicketMessage message = ticket.addMessage(MessageAuthor.ADMIN, body, now, messageId);
-        if (ticket.getStatus() != TicketStatus.RESOLVED) {
-            ticket.changeStatus(TicketStatus.IN_PROGRESS, now);
-        }
+        TicketMessage message = ticket.addMessage(author, body, now, messageId);
+        ticket.changeStatus(newStatus, now);
         // Flush (not save, whose cascaded merge would persist a copy) so the returned message gets its id.
         ticketRepository.flush();
         emailSender.send(new OutboundEmail(ticket.getCustomerEmail(), replySubject(ticket), body,
-                messageId, inReplyTo, references));
-        return MessageDto.from(message);
+                messageId, inReplyTo, references, autoReply));
+        return message;
     }
 
     private static String latestCustomerMessageId(Ticket ticket) {

@@ -46,5 +46,20 @@ class SmtpEmailSenderTest {
         assertThat(message.getAllRecipients()[0].toString()).isEqualTo("jane@example.com");
         assertThat(message.getSubject()).isEqualTo("Re: Invoice [#3]");
         assertThat(message.getContent()).isEqualTo("Refunded.");
+        assertThat(message.getHeader("Auto-Submitted")).isNull();
+    }
+
+    @Test
+    void aiReply_isMarkedAsAutomated() throws Exception {
+        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));
+        SmtpEmailSender sender = new SmtpEmailSender(mailSender,
+                new EmailProperties("support@test.example", "Acme Support", null, false));
+
+        sender.send(new OutboundEmail("jane@example.com", "Re: Login [#3]", "Try Forgot Password.",
+                "<ours@test.example>", null, null, true));
+
+        ArgumentCaptor<MimeMessage> sent = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(sent.capture());
+        assertThat(sent.getValue().getHeader("Auto-Submitted", null)).isEqualTo("auto-replied");
     }
 }
