@@ -3,7 +3,7 @@ package com.customersupport.backend.dto;
 import java.util.List;
 
 /**
- * A customer email received through the SendGrid Inbound Parse webhook, already parsed and cleaned
+ * A customer email received through Resend, already parsed and cleaned
  * (see InboundEmailParser).
  *
  * @param fromAddress     sender address, lower-cased

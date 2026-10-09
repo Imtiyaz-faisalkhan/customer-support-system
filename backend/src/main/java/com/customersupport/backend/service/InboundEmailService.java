@@ -29,7 +29,7 @@ public class InboundEmailService {
     }
 
     private static final Logger log = LoggerFactory.getLogger(InboundEmailService.class);
-    private static final Pattern TICKET_TAG = Pattern.compile("\\[#(\\d+)]");
+    private static final Pattern TICKET_TAG = Pattern.compile("\\[#(\\d+)-([A-Z0-9]+)]");
 
     private final TicketService ticketService;
     private final TicketRepository ticketRepository;
@@ -49,13 +49,15 @@ public class InboundEmailService {
             log.info("Ignoring automated or self-sent inbound email from={}", email.fromAddress());
             return new Result(Outcome.IGNORED, null);
         }
-        // SendGrid retries deliveries it thinks failed; the same Message-ID must not be stored twice.
+        // Resend retries webhooks it thinks failed; the same Message-ID must not be stored twice.
         if (email.messageId() != null && messageRepository.existsByExternalMessageId(email.messageId())) {
             return new Result(Outcome.DUPLICATE, null);
         }
 
         Optional<Ticket> existing = findTicketRepliedTo(email)
-                // Only the ticket's own customer may add to it; anyone else starts a new ticket.
+                // Only the ticket's own customer may add to it; anyone else starts a new ticket. The From address
+                // can be forged, so this is only as strong as the thread match: a stored Message-ID or the random
+                // token in the subject tag, both of which only appear in emails exchanged with that customer.
                 .filter(ticket -> ticket.getCustomerEmail().equalsIgnoreCase(email.fromAddress()));
         if (existing.isPresent()) {
             Long ticketId = existing.get().getId();
@@ -67,7 +69,7 @@ public class InboundEmailService {
         return new Result(Outcome.CREATED, ticketId);
     }
 
-    /** Threading headers first (In-Reply-To/References -> a message we know), then the "[#123]" subject tag. */
+    /** Threading headers first (In-Reply-To/References -> a message we know), then the "[#123-TOKEN]" subject tag. */
     private Optional<Ticket> findTicketRepliedTo(InboundEmail email) {
         if (!email.threadIds().isEmpty()) {
             Optional<Ticket> byHeaders = messageRepository.findByExternalMessageIdIn(email.threadIds()).stream()
@@ -78,6 +80,10 @@ public class InboundEmailService {
             }
         }
         Matcher tag = TICKET_TAG.matcher(email.subject());
-        return tag.find() ? ticketRepository.findById(Long.parseLong(tag.group(1))) : Optional.empty();
+        if (!tag.find()) {
+            return Optional.empty();
+        }
+        return ticketRepository.findById(Long.parseLong(tag.group(1)))
+                .filter(ticket -> tag.group(2).equals(ticket.getReplyToken()));
     }
 }

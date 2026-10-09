@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 @Entity
-// Unique: an email Message-ID identifies exactly one message (dedupes SendGrid webhook retries). NULLs allowed.
+// Unique: an email Message-ID identifies exactly one message (dedupes webhook retries). NULLs allowed.
 @Table(name = "ticket_messages",
         indexes = @Index(name = "ux_ticket_messages_external_message_id", columnList = "externalMessageId", unique = true))
 @Getter

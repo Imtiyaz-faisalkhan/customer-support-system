@@ -20,7 +20,7 @@ class ResendClientTest {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         ResendClient client = new ResendClient(builder, new EmailProperties("support@test.example", "Support",
-                null, null, new EmailProperties.Resend("re_secret", "whsec_x", "https://api.resend.test")));
+                new EmailProperties.Resend("re_secret", "whsec_x", "https://api.resend.test"), false));
 
         // Trimmed copy of the documented response, incl. fields we ignore.
         server.expect(requestTo("https://api.resend.test/emails/receiving/4ef9a417"))

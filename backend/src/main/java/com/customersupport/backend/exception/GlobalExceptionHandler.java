@@ -28,6 +28,12 @@ public class GlobalExceptionHandler {
         return Map.of("error", ex.getMessage());
     }
 
+    @ExceptionHandler(UndeliverableRecipientException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> undeliverable(UndeliverableRecipientException ex) {
+        return Map.of("error", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> invalidBody(MethodArgumentNotValidException ex) {

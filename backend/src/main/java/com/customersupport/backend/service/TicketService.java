@@ -13,6 +13,7 @@ import com.customersupport.backend.enums.TicketCategory;
 import com.customersupport.backend.enums.TicketStatus;
 import com.customersupport.backend.exception.InvalidStatusTransitionException;
 import com.customersupport.backend.exception.TicketNotFoundException;
+import com.customersupport.backend.exception.UndeliverableRecipientException;
 import com.customersupport.backend.repository.TicketRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -32,6 +34,10 @@ public class TicketService {
     /** OPEN and AI_RESPONDED are set by the system (ingestion/AI), never by the admin directly. */
     private static final Set<TicketStatus> ADMIN_SETTABLE_STATUSES =
             EnumSet.of(TicketStatus.PENDING_HUMAN, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED);
+
+    /** Reserved for documentation and testing (RFC 2606/6761): mail to them can never be delivered. */
+    private static final Set<String> RESERVED_DOMAINS = Set.of("example.com", "example.net", "example.org");
+    private static final List<String> RESERVED_TLDS = List.of(".test", ".example", ".invalid", ".localhost");
 
     private final TicketRepository ticketRepository;
     private final EmailSender emailSender;
@@ -95,6 +101,11 @@ public class TicketService {
      */
     public MessageDto reply(Long id, String body) {
         Ticket ticket = findTicket(id);
+        if (emailProperties.rejectReservedRecipients() && isReservedAddress(ticket.getCustomerEmail())) {
+            // Such a reply would bounce, and bounces hurt the sending domain's reputation with real email.
+            throw new UndeliverableRecipientException(ticket.getCustomerEmail()
+                    + " is a test address that can't receive email, so the reply was not sent.");
+        }
         Instant now = Instant.now();
         // Threading: In-Reply-To = the customer's latest email, References = every earlier email in the thread.
         String inReplyTo = latestCustomerMessageId(ticket);
@@ -131,11 +142,20 @@ public class TicketService {
         return ticketRepository.findById(id).orElseThrow(() -> new TicketNotFoundException(id));
     }
 
-    /** "Re: <subject> [#id]"; the [#id] tag lets InboundEmailService match a reply even without threading headers. */
+    private static boolean isReservedAddress(String address) {
+        String domain = address.substring(address.lastIndexOf('@') + 1).toLowerCase();
+        return RESERVED_DOMAINS.stream().anyMatch(d -> domain.equals(d) || domain.endsWith("." + d))
+                || RESERVED_TLDS.stream().anyMatch(domain::endsWith);
+    }
+
+    /**
+     * "Re: <subject> [#id-token]"; the tag lets InboundEmailService match a reply even without threading headers
+     * (Resend may replace our Message-ID).
+     */
     private static String replySubject(Ticket ticket) {
         String subject = ticket.getSubject();
         String reply = subject.regionMatches(true, 0, "Re:", 0, 3) ? subject : "Re: " + subject;
-        String tag = "[#" + ticket.getId() + "]";
+        String tag = ticket.replyTag();
         return reply.contains(tag) ? reply : reply + " " + tag;
     }
 }

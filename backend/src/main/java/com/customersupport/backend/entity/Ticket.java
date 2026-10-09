@@ -21,6 +21,7 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -31,6 +32,9 @@ import java.util.List;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Ticket {
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -67,6 +71,13 @@ public class Ticket {
 
     private Instant resolvedAt;
 
+    /**
+     * Random part of the "[#id-token]" subject tag on our emails. Ticket ids are sequential, so the token is what
+     * stops someone who forges the customer's From address from guessing their way into a ticket's thread.
+     */
+    @Column(length = 16)
+    private String replyToken;
+
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("createdAt ASC")
     private List<TicketMessage> messages = new ArrayList<>();
@@ -76,6 +87,23 @@ public class Ticket {
         this.customerName = customerName;
         this.subject = subject;
         this.status = TicketStatus.OPEN;
+        this.replyToken = newReplyToken();
+    }
+
+    /** "[#id-token]"; assigns a token first for tickets created before tokens existed. */
+    public String replyTag() {
+        if (replyToken == null) {
+            replyToken = newReplyToken();
+        }
+        return "[#" + id + "-" + replyToken + "]";
+    }
+
+    private static String newReplyToken() {
+        StringBuilder token = new StringBuilder(8);
+        for (int i = 0; i < 8; i++) {
+            token.append(TOKEN_ALPHABET.charAt(RANDOM.nextInt(TOKEN_ALPHABET.length())));
+        }
+        return token.toString();
     }
 
     public TicketMessage addMessage(MessageAuthor author, String body, Instant now) {

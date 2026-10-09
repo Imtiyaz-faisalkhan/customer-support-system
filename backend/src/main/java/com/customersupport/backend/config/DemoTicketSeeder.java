@@ -22,8 +22,8 @@ import java.util.List;
 
 /**
  * Local-dev only: fills an empty tickets table with realistic sample tickets so the API/UI have something
- * to show before the inbound-email webhook exists. Enabled by app.demo-data.enabled=true; never seeds a
- * table that already has tickets. Writes entities directly (not via TicketService) because it needs
+ * to show without real customer email. Enabled by app.demo-data.enabled=true (off in
+ * scripts/run-backend-resend.sh, where replies are real emails); never seeds a table that already has tickets. Writes entities directly (not via TicketService) because it needs
  * system-only statuses, AI messages, and back-dated timestamps. Ticket createdAt/updatedAt are
  * Hibernate-generated (always "now"), so they're back-dated with a native UPDATE after saving.
  */

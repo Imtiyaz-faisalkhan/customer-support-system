@@ -4,10 +4,10 @@ Working notes carried across review sessions. Read at the start of every review,
 
 ## Known accepted trade-offs (do not re-flag)
 
-- CSRF is disabled in `SecurityConfig` on purpose, accepted MVP trade-off (SameSite session cookie + CORS locked to the frontend origin is the baseline defense for this single-admin, local-only tool). Not a finding unless the deployment context changes.
+- CSRF is disabled in `SecurityConfig` on purpose, accepted MVP trade-off. Deployment context changed 2026-10 (public via ngrok); still low risk because all mutating endpoints except logout require JSON bodies (form POST -> 415, JSON -> preflight). Note: no `same-site` cookie property is actually configured (comment's 'SameSite' baseline relies on browser defaults).
 - Single hardcoded admin account via `InMemoryUserDetailsManager`, no multi-user/roles model. Not a finding; don't suggest adding RBAC or a users table unless asked.
 - No migration tool (Flyway/Liquibase); `spring.jpa.hibernate.ddl-auto=update` is the current intended state. Not a finding on its own.
-- `WebConfig` CORS restricting `/api/**` to `http://localhost:5173` is dormant in normal `npm run dev` (Vite proxy makes requests same-origin). Only relevant for non-proxied clients or a future split-origin deploy.
+- (Corrected 2026-10) `WebConfig` CORS is NOT dormant behind the Vite proxy: the browser Origin is forwarded, so origins come from `app.cors.allowed-origins` (localhost:5173 + ngrok URL). Covered by CorsIntegrationTest.
 
 ## Conventions confirmed from CLAUDE.md
 
@@ -15,12 +15,17 @@ Working notes carried across review sessions. Read at the start of every review,
 - All frontend API calls must go through the shared `frontend/src/api/axios.js` instance, not raw `fetch` — it has the global 401-to-logout interceptor baked in.
 - New backend endpoints are `authenticated()`-protected by default; an endpoint missing from `permitAll()` is only a finding if it's supposed to be public.
 
-- Accepted (2026-10 review): OPEN/AI_RESPONDED system-only statuses; LoggingEmailSender stub; no inbound webhook yet; DemoTicketSeeder on via `app.demo-data.enabled=true` in main application.properties; local Postgres column-type mismatch after Instant->LocalDateTime switch (user drops tables).
+- Accepted (2026-10 review): OPEN/AI_RESPONDED system-only statuses; LoggingEmailSender (now the test-profile sender); DemoTicketSeeder on via `app.demo-data.enabled=true` for plain local dev (re-flagged 2026-10 only for the real Resend run, which shares the DB); local Postgres column-type mismatch after Instant->LocalDateTime switch (user drops tables).
 - AuthControllerTest clearing SecurityContextHolder in @AfterEach is an intentional thread-local leak fix.
+- MetricsService escalation finding (below) was fixed: PENDING_HUMAN/IN_PROGRESS now count as human.
 - Accepted (2026-10 dashboard review): no dashboard auto-refresh; single-hue breakdown bars + 2-segment stacked AI/human bar (dataviz skill); metrics aggregated in Java not SQL GROUP BY (documented in CLAUDE.md); local Postgres keeps timestamptz for Ticket.createdAt/updatedAt (works, pgjdbc uses JVM zone).
 - Dashboard metrics cover tickets *created* in the window (current status/category); bucket dates are server-local. Documented in CLAUDE.md "Dashboard metrics".
 
 ## Codebase facts
+
+- Email is Resend-only (2026-10): ResendWebhookController (permitAll, Svix verify) -> ResendClient -> InboundEmailParser -> InboundEmailService; outbound SmtpEmailSender to smtp.resend.com. SendGrid webhook and IONOS IMAP poller were deliberately removed; never suggest re-adding.
+- App is publicly reachable: scripts/start-tunnel.sh tunnels the Vite DEV server :5173 (serves whole frontend/ tree incl. e2e/auth.spec.js with default creds; /@fs outside frontend/ is 403). run-backend-resend.sh prompts for secrets.
+- RestClient default factory here has no Apache/Jetty on classpath -> JDK/simple factory, no timeouts unless set.
 
 - Backend is layered (config/controller/dto/entity/enums/repository/service/exception), not feature packages; CLAUDE.md on disk documents this (the system-reminder copy can be stale; read the file).
 - Ticket.createdAt/updatedAt are LocalDateTime (@CreationTimestamp/@UpdateTimestamp); TicketMessage.createdAt, firstResponseAt, resolvedAt are Instant. addMessage touches updatedAt on purpose.
@@ -31,11 +36,11 @@ Working notes carried across review sessions. Read at the start of every review,
 - Mixed LocalDateTime/Instant timestamps: resolved by ApiTimestamps.toInstant in DTOs (all API timestamps UTC `Z`); verified 2026-10.
 - Fixed and verified 2026-10: messageCount removed from TicketSummary; Link stopPropagation in TicketsPage rows; TicketsPage query-tagged responses; TicketDetailPage applies action response then refreshQuietly().
 - Pattern: "keep previous response, tag with period/query" state in pages. Watch the error path (stale data shown undimmed under a new label) and races between multiple un-cancelled refetches.
-- Flagged 2026-10: MetricsService counts AI-replied-then-escalated (PENDING_HUMAN, no admin msg) tickets as "AI handled", contradicting PROJECT_PLAN's Pending Human definition.
+- Flagged 2026-10 (Resend review): default admin pw usable over tunnel; Vite dev server public; ResendClient no timeouts; null Message-ID breaks dedupe; From-spoofing vs [#id] guard; stale EMAIL_INBOUND export; demo seeder on in Resend mode; parser leftover Function indirection. Check status next review.
 
 ## Environment facts
 
-- Live JVM zone is UTC+2 (CEST); dashboard `from` shows 22:00Z. Seeded live DB has 9 tickets; ticket 6 is the AI->customer follow-up->PENDING_HUMAN case.
+- Live JVM zone is UTC+2 (CEST); dashboard `from` shows 22:00Z. Seeded live DB had 9 demo tickets (@example.com) and is the same DB the Resend run uses; ticket 6 is the AI->customer follow-up->PENDING_HUMAN case.
 - target/surefire-reports contains stale reports from the old auth/ and ticket/ test packages; check timestamps before trusting them.
 
 ## False positives the user has dismissed

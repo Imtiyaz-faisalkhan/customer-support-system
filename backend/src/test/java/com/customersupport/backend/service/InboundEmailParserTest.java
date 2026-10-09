@@ -2,17 +2,11 @@ package com.customersupport.backend.service;
 
 import com.customersupport.backend.dto.InboundEmail;
 import com.customersupport.backend.dto.ResendReceivedEmail;
-import jakarta.mail.Session;
-import jakarta.mail.internet.InternetAddress;
-import jakarta.mail.internet.MimeBodyPart;
-import jakarta.mail.internet.MimeMessage;
-import jakarta.mail.internet.MimeMultipart;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,27 +15,29 @@ class InboundEmailParserTest {
 
     private final InboundEmailParser parser = new InboundEmailParser();
 
-    private static Map<String, String> fields(String from, String subject, String text, String headers) {
-        Map<String, String> fields = new HashMap<>();
-        fields.put("from", from);
-        fields.put("subject", subject);
-        fields.put("text", text);
-        fields.put("headers", headers);
-        return fields;
+    /** A received email as Resend's GET /emails/receiving/{id} returns it (headers are a lowercase-keyed map). */
+    private static ResendReceivedEmail email(String from, String subject, String text, String html,
+                                             Map<String, Object> headers, String messageId, int attachments) {
+        List<Map<String, Object>> files = java.util.stream.IntStream.range(0, attachments)
+                .mapToObj(i -> Map.<String, Object>of("filename", "file" + i + ".pdf"))
+                .toList();
+        return new ResendReceivedEmail("e1", from, subject, text, html, headers, messageId, files);
+    }
+
+    private static InboundEmail parseText(InboundEmailParser parser, String from, String text,
+                                          Map<String, Object> headers) {
+        return parser.parse(email(from, "Subject", text, null, headers, null, 0));
     }
 
     @Test
-    void parsesSenderSubjectBodyAndThreadingHeaders() {
-        String headers = """
-                From: Jane Doe <Jane@Example.com>
-                Message-ID: <new-1@mail.example.com>
-                In-Reply-To: <ours-2@support.test>
-                References: <first-0@mail.example.com>
-                 <ours-2@support.test>
-                Subject: Re: Invoice
-                """;
+    void usesDisplayNameFromHeaders_andThreadingIds() {
+        Map<String, Object> headers = Map.of(
+                "from", "Jane Doe <Jane@Example.com>",
+                "in-reply-to", "<ours-2@support.test>",
+                "references", "<first-0@mail.example.com> <ours-2@support.test>");
 
-        InboundEmail email = parser.parse(fields("Jane Doe <Jane@Example.com>", "Re: Invoice", "Thanks!", headers));
+        InboundEmail email = parser.parse(email("jane@example.com", "Re: Invoice", "Thanks!", null, headers,
+                "<new-1@mail.example.com>", 0));
 
         assertThat(email.fromAddress()).isEqualTo("jane@example.com");
         assertThat(email.fromName()).isEqualTo("Jane Doe");
@@ -54,27 +50,28 @@ class InboundEmailParserTest {
     }
 
     @Test
-    void senderWithoutDisplayName_andMissingSubject() {
-        InboundEmail email = parser.parse(fields("bob@example.com", "  ", "Hi", ""));
+    void fallsBackToTopLevelSender_whenNoFromHeader_andHandlesMissingSubject() {
+        InboundEmail email = parser.parse(email("bob@example.com", "  ", "Hi", null, null, null, 0));
 
+        assertThat(email.fromAddress()).isEqualTo("bob@example.com");
         assertThat(email.fromName()).isNull();
         assertThat(email.subject()).isEqualTo("(no subject)");
-        assertThat(email.messageId()).isNull();
+        // No Message-ID anywhere: Resend's id stands in, so a retried delivery is still recognised as a duplicate.
+        assertThat(email.messageId()).isEqualTo("<e1@resend.invalid>");
         assertThat(email.threadIds()).isEmpty();
     }
 
     @Test
     void invalidSender_isRejected() {
-        assertThatThrownBy(() -> parser.parse(fields("not an address", "Hi", "Hi", "")))
+        assertThatThrownBy(() -> parser.parse(email("not an address", "Hi", "Hi", null, null, null, 0)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void htmlOnlyEmail_isConvertedToPlainText() {
-        Map<String, String> fields = fields("bob@example.com", "Hi", null, "");
-        fields.put("html", "<div>Hello &amp; welcome<br>Line two</div><p>Para <b>bold</b></p><script>x()</script>");
+        String html = "<div>Hello &amp; welcome<br>Line two</div><p>Para <b>bold</b></p><script>x()</script>";
 
-        String body = parser.parse(fields).body();
+        String body = parser.parse(email("bob@example.com", "Hi", null, html, null, null, 0)).body();
 
         assertThat(body).isEqualTo("Hello & welcome\nLine two\nPara bold");
     }
@@ -111,84 +108,28 @@ class InboundEmailParserTest {
     }
 
     @Test
-    void attachmentsAreNotedAndAutoRepliesFlagged() {
-        Map<String, String> fields = fields("bot@example.com", "Out of office", "I'm away",
-                "Auto-Submitted: auto-replied\n");
-        fields.put("attachments", "2");
+    void attachmentsAreNoted() {
+        InboundEmail email = parser.parse(email("a@example.com", "Docs", "See files", null, null, null, 2));
 
-        InboundEmail email = parser.parse(fields);
-
-        assertThat(email.body()).endsWith("[2 attachments not imported]");
-        assertThat(email.automated()).isTrue();
-        assertThat(parser.parse(fields("a@example.com", "x", "y", "Precedence: bulk\n")).automated()).isTrue();
-        assertThat(parser.parse(fields("a@example.com", "x", "y", "Auto-Submitted: no\n")).automated()).isFalse();
+        assertThat(email.body()).isEqualTo("See files\n\n[2 attachments not imported]");
     }
 
     @Test
-    void mimeMessage_multipartWithHtmlAndAttachment() throws Exception {
-        MimeMessage message = new MimeMessage(Session.getInstance(new Properties()));
-        message.setFrom(new InternetAddress("jane@example.com", "Jane Doe", "UTF-8"));
-        message.setSubject("Invoice question");
-        message.setHeader("Message-ID", "<m1@mail.example.com>");
-        message.setHeader("In-Reply-To", "<ours-1@test.example>");
-        MimeMultipart alternative = new MimeMultipart("alternative");
-        MimeBodyPart text = new MimeBodyPart();
-        text.setText("Where is my invoice?", "UTF-8");
-        MimeBodyPart html = new MimeBodyPart();
-        html.setContent("<p>Where is my <b>invoice</b>?</p>", "text/html; charset=UTF-8");
-        alternative.addBodyPart(text);
-        alternative.addBodyPart(html);
-        MimeBodyPart alternativeWrapper = new MimeBodyPart();
-        alternativeWrapper.setContent(alternative);
-        MimeBodyPart attachment = new MimeBodyPart();
-        attachment.setContent("PDFDATA", "application/pdf");
-        attachment.setFileName("receipt.pdf");
-        MimeMultipart mixed = new MimeMultipart("mixed");
-        mixed.addBodyPart(alternativeWrapper);
-        mixed.addBodyPart(attachment);
-        message.setContent(mixed);
-        message.saveChanges();
-
-        InboundEmail email = parser.parse(message);
-
-        assertThat(email.fromAddress()).isEqualTo("jane@example.com");
-        assertThat(email.fromName()).isEqualTo("Jane Doe");
-        assertThat(email.subject()).isEqualTo("Invoice question");
-        assertThat(email.body()).isEqualTo("Where is my invoice?\n\n[1 attachment not imported]");
-        assertThat(email.threadIds()).containsExactly("<ours-1@test.example>");
-        assertThat(email.automated()).isFalse();
-    }
-
-    @Test
-    void bouncesFromMailerDaemon_areFlaggedAutomated() {
-        assertThat(parser.parse(fields("MAILER-DAEMON@mx.example.com", "Undelivered", "failed", "")).automated())
+    void autoRepliesBouncesAndBulkMail_areFlaggedAutomated() {
+        assertThat(parseText(parser, "a@example.com", "Away", Map.of("auto-submitted", "auto-replied")).automated())
                 .isTrue();
-        assertThat(parser.parse(fields("a@example.com", "x", "y",
-                "Content-Type: multipart/report; report-type=delivery-status\n")).automated()).isTrue();
-    }
-
-    @Test
-    void resendEmail_usesDisplayNameAndThreadingFromLowercaseHeaders() {
-        ResendReceivedEmail received = new ResendReceivedEmail("e1", "jane@example.com", "Re: Invoice [#3]",
-                null, "<p>Still waiting</p>",
-                Map.of("from", "Jane Doe <jane@example.com>", "in-reply-to", "<ours@support.example.com>",
-                        "references", "<first@mail.example.com> <ours@support.example.com>"),
-                "<m2@mail.example.com>", List.of(Map.of("filename", "a.png")));
-
-        InboundEmail email = parser.parse(received);
-
-        assertThat(email.fromAddress()).isEqualTo("jane@example.com");
-        assertThat(email.fromName()).isEqualTo("Jane Doe");
-        assertThat(email.body()).isEqualTo("Still waiting\n\n[1 attachment not imported]");
-        assertThat(email.messageId()).isEqualTo("<m2@mail.example.com>"); // top-level field, no header needed
-        assertThat(email.threadIds()).containsExactly("<ours@support.example.com>", "<first@mail.example.com>");
+        assertThat(parseText(parser, "a@example.com", "x", Map.of("precedence", "bulk")).automated()).isTrue();
+        assertThat(parseText(parser, "MAILER-DAEMON@mx.example.com", "failed", Map.of()).automated()).isTrue();
+        assertThat(parseText(parser, "a@example.com", "x",
+                Map.of("content-type", "multipart/report; report-type=delivery-status")).automated()).isTrue();
+        assertThat(parseText(parser, "a@example.com", "x", Map.of("auto-submitted", "no")).automated()).isFalse();
     }
 
     @Test
     void overlongSubject_isTruncatedToTheColumnSize() {
-        String subject = "x".repeat(400);
+        Map<String, Object> noHeaders = new HashMap<>();
 
-        assertThat(parser.parse(fields("a@example.com", subject, "y", "")).subject())
+        assertThat(parser.parse(email("a@example.com", "x".repeat(400), "y", null, noHeaders, null, 0)).subject())
                 .hasSize(InboundEmailParser.MAX_SUBJECT_LENGTH);
     }
 }

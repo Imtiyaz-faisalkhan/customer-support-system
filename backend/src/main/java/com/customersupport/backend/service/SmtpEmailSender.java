@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
 import java.io.UnsupportedEncodingException;
 
 /**
- * Sends customer emails over SMTP ({@code spring.mail.*}): Mailpit locally, SendGrid's SMTP relay in real use.
- * SMTP rather than SendGrid's Web API keeps full control of the threading headers and stays provider-portable.
+ * Sends customer emails over SMTP ({@code spring.mail.*}): Mailpit locally, Resend's SMTP relay in real use.
+ * SMTP rather than Resend's Web API keeps full control of the threading headers and stays provider-portable.
  */
 @Component
 @ConditionalOnProperty(name = "app.email.outbound", havingValue = "smtp")

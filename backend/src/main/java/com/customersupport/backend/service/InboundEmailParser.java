@@ -2,22 +2,14 @@ package com.customersupport.backend.service;
 
 import com.customersupport.backend.dto.InboundEmail;
 import com.customersupport.backend.dto.ResendReceivedEmail;
-import jakarta.mail.MessagingException;
-import jakarta.mail.Multipart;
-import jakarta.mail.Part;
 import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.InternetAddress;
-import jakarta.mail.internet.InternetHeaders;
-import jakarta.mail.internet.MimeMessage;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.parser.Parser;
 import org.jsoup.safety.Safelist;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,10 +20,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Turns a received email into an {@link InboundEmail}, from either source: a message read from a mailbox over
- * IMAP ({@link #parse(MimeMessage)}, used by ImapMailboxPoller) or SendGrid-style Inbound Parse form fields
- * ({@link #parse(Map)}: from, subject, text, html, headers, attachments; used by the webhook and the local
- * simulation script). Pure parsing, no persistence, so it's unit-testable on its own.
+ * Turns an email fetched from Resend's receiving API into an {@link InboundEmail}: sender, subject, plain-text body
+ * (quoted history stripped), threading IDs and an auto-reply flag. Pure parsing, no persistence, so it's
+ * unit-testable on its own.
  */
 @Component
 public class InboundEmailParser {
@@ -46,45 +37,20 @@ public class InboundEmailParser {
     private static final Pattern OUTLOOK_SEPARATOR =
             Pattern.compile("^(-{2,}\\s*Original Message\\s*-{2,}|_{10,})\\s*$", Pattern.CASE_INSENSITIVE);
 
-    /** Webhook form fields. @throws IllegalArgumentException if the sender address is missing or invalid */
-    public InboundEmail parse(Map<String, String> fields) {
-        InternetHeaders headers = parseHeaders(fields.get("headers"));
-        return build(fields.get("from"), fields.get("subject"), fields.get("text"), fields.get("html"),
-                name -> header(headers, name), parseInt(fields.get("attachments")));
-    }
-
-    /** A message read from the mailbox. @throws IllegalArgumentException if it can't be read or has no valid sender */
-    public InboundEmail parse(MimeMessage message) {
-        try {
-            MimeContent content = new MimeContent();
-            content.collect(message);
-            return build(message.getHeader("From", ","), message.getSubject(), content.text, content.html,
-                    name -> mimeHeader(message, name), content.attachments);
-        } catch (MessagingException | IOException ex) {
-            throw new IllegalArgumentException("Unreadable email: " + ex.getMessage(), ex);
-        }
-    }
-
     /** An email fetched from Resend's receiving API. @throws IllegalArgumentException if it has no valid sender */
     public InboundEmail parse(ResendReceivedEmail email) {
         Map<String, Object> headers = email.headers() == null ? Map.of() : email.headers();
+        // Resend's header map is lowercase-keyed; look up case-insensitively anyway.
         Function<String, String> header = name -> headers.entrySet().stream()
                 .filter(entry -> entry.getKey().equalsIgnoreCase(name) && entry.getValue() != null)
                 .map(entry -> String.valueOf(entry.getValue()))
                 .findFirst()
                 .orElse(null);
-        // The "from" header keeps the display name ("Jane <jane@x.com>"); the top-level field may be address-only.
-        String from = header.apply("From") != null ? header.apply("From") : email.from();
-        Function<String, String> withMessageId = name -> name.equalsIgnoreCase("Message-ID")
-                && header.apply(name) == null ? email.messageId() : header.apply(name);
-        return build(from, email.subject(), email.text(), email.html(), withMessageId,
-                email.attachments() == null ? 0 : email.attachments().size());
-    }
 
-    private InboundEmail build(String fromHeader, String subject, String text, String html,
-                               Function<String, String> header, int attachments) {
-        InternetAddress from = parseFrom(fromHeader);
-        String body = stripQuotedHistory(bodyText(text, html));
+        // The "from" header keeps the display name ("Jane <jane@x.com>"); the top-level field may be address-only.
+        InternetAddress from = parseFrom(header.apply("From") != null ? header.apply("From") : email.from());
+        String body = stripQuotedHistory(bodyText(email.text(), email.html()));
+        int attachments = email.attachments() == null ? 0 : email.attachments().size();
         if (attachments > 0) {
             body += "\n\n[" + attachments + (attachments == 1 ? " attachment" : " attachments")
                     + " not imported]";
@@ -98,48 +64,30 @@ public class InboundEmailParser {
         List<String> references = new ArrayList<>(messageIds(header.apply("References")));
         threadIds.addAll(references.reversed());
 
-        List<String> ownIds = messageIds(header.apply("Message-ID"));
         String fromAddress = from.getAddress().toLowerCase();
         return new InboundEmail(
                 fromAddress,
                 truncate(blankToNull(from.getPersonal()), MAX_NAME_LENGTH),
-                truncate(subjectOrDefault(subject), MAX_SUBJECT_LENGTH),
+                truncate(subjectOrDefault(email.subject()), MAX_SUBJECT_LENGTH),
                 body,
-                ownIds.isEmpty() ? null : ownIds.getFirst(),
+                messageId(header.apply("Message-ID"), email),
                 List.copyOf(new LinkedHashSet<>(threadIds)),
                 isAutomated(fromAddress, header));
     }
 
-    /** Text/HTML bodies and attachment count of a (possibly nested multipart) message; first text parts win. */
-    private static final class MimeContent {
-        String text;
-        String html;
-        int attachments;
-
-        void collect(Part part) throws MessagingException, IOException {
-            if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())
-                    || part.isMimeType("message/rfc822")
-                    || (part.getFileName() != null && !part.isMimeType("multipart/*"))) {
-                attachments++;
-            } else if (part.isMimeType("text/plain") && text == null) {
-                text = String.valueOf(part.getContent());
-            } else if (part.isMimeType("text/html") && html == null) {
-                html = String.valueOf(part.getContent());
-            } else if (part.isMimeType("multipart/*")) {
-                Multipart multipart = (Multipart) part.getContent();
-                for (int i = 0; i < multipart.getCount(); i++) {
-                    collect(multipart.getBodyPart(i));
-                }
-            }
+    /**
+     * The email's own Message-ID, which InboundEmailService uses to drop Resend's retries of the same delivery.
+     * An email without one still needs a stable key, so Resend's id for it stands in.
+     */
+    private static String messageId(String headerValue, ResendReceivedEmail email) {
+        List<String> ids = messageIds(headerValue);
+        if (ids.isEmpty()) {
+            ids = messageIds(email.messageId());
         }
-    }
-
-    private static String mimeHeader(MimeMessage message, String name) {
-        try {
-            return message.getHeader(name, " ");
-        } catch (MessagingException ex) {
-            return null;
+        if (!ids.isEmpty()) {
+            return ids.getFirst();
         }
+        return email.id() == null ? null : "<" + email.id() + "@resend.invalid>";
     }
 
     private static InternetAddress parseFrom(String from) {
@@ -157,21 +105,6 @@ public class InboundEmailParser {
         }
     }
 
-    private static InternetHeaders parseHeaders(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return new InternetHeaders();
-        }
-        try {
-            return new InternetHeaders(new ByteArrayInputStream(raw.getBytes(StandardCharsets.UTF_8)), true);
-        } catch (MessagingException ex) {
-            return new InternetHeaders(); // unparseable headers only cost us threading/dedupe, not the email
-        }
-    }
-
-    private static String header(InternetHeaders headers, String name) {
-        return headers.getHeader(name, " ");
-    }
-
     private static List<String> messageIds(String headerValue) {
         List<String> ids = new ArrayList<>();
         if (headerValue != null) {
@@ -185,7 +118,7 @@ public class InboundEmailParser {
 
     /**
      * Auto-replies (out-of-office), bounces and bulk mail must not open tickets or loop with our replies.
-     * Bounces matter for IMAP: every undeliverable reply comes back into the support mailbox.
+     * Bounces of our own replies come back to the support address, so they must be recognised too.
      */
     private static boolean isAutomated(String fromAddress, Function<String, String> header) {
         String localPart = fromAddress.substring(0, fromAddress.indexOf('@'));
@@ -263,13 +196,5 @@ public class InboundEmailParser {
 
     private static String truncate(String value, int max) {
         return value == null || value.length() <= max ? value : value.substring(0, max);
-    }
-
-    private static int parseInt(String value) {
-        try {
-            return value == null ? 0 : Integer.parseInt(value.trim());
-        } catch (NumberFormatException ex) {
-            return 0;
-        }
     }
 }

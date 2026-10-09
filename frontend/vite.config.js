@@ -8,15 +8,21 @@ export default defineConfig({
   server: {
     // Vite rejects requests whose Host it doesn't know (DNS-rebinding protection). Allow ngrok addresses so the
     // tunnel (scripts/start-tunnel.sh) can serve the app -- and, via the /api proxy below, the Resend webhook.
+    // The preview server inherits this and the proxy.
     allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app'],
     proxy: {
       // Same-origin from the browser's POV -> no CORS, no credentials:'include' needed.
-      // Note: `npm run preview` does NOT use this block (see Vite's `preview.proxy` if ever needed).
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
     },
+  },
+  // `npm run start:public`: the built app only (dist/), never the source tree -- this is what the ngrok tunnel
+  // exposes. strictPort, because start-tunnel.sh points at exactly this port.
+  preview: {
+    port: 4173,
+    strictPort: true,
   },
   test: {
     environment: 'jsdom',

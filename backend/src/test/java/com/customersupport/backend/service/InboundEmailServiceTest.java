@@ -44,7 +44,7 @@ class InboundEmailServiceTest {
     @BeforeEach
     void setUp() {
         service = new InboundEmailService(ticketService, ticketRepository, messageRepository,
-                new EmailProperties("support@test.example", "Support", null, null, null));
+                new EmailProperties("support@test.example", "Support", null, false));
     }
 
     private static InboundEmail email(String from, String subject, String messageId, List<String> threadIds) {
@@ -83,24 +83,40 @@ class InboundEmailServiceTest {
 
     @Test
     void replyMatchedBySubjectTag_whenHeadersAreMissing() {
-        when(ticketRepository.findById(3L)).thenReturn(Optional.of(ticket(3, "jane@example.com")));
+        Ticket ticket = ticket(3, "jane@example.com");
+        when(ticketRepository.findById(3L)).thenReturn(Optional.of(ticket));
 
         InboundEmailService.Result result = service.receive(
-                email("jane@example.com", "Re: Invoice [#3]", "<m3@x>", List.of()));
+                email("jane@example.com", "Re: Invoice " + ticket.replyTag(), "<m3@x>", List.of()));
 
         assertThat(result.outcome()).isEqualTo(Outcome.APPENDED);
         verify(ticketService).appendCustomerReply(3L, "Hello", "<m3@x>");
     }
 
     @Test
-    void someoneElseReplyingToATicket_opensANewTicketInstead() {
+    void subjectTagWithWrongOrMissingToken_opensANewTicket() {
         when(ticketRepository.findById(3L)).thenReturn(Optional.of(ticket(3, "jane@example.com")));
         TicketDetail created = mock(TicketDetail.class);
         when(created.id()).thenReturn(8L);
         when(ticketService.openTicket(any(), any(), any(), any(), any())).thenReturn(created);
 
+        // Ticket ids are sequential; without the token a forged sender can't target a ticket.
+        assertThat(service.receive(email("jane@example.com", "Re: Invoice [#3-AAAAAAAA]", "<m4@x>", List.of())))
+                .isEqualTo(new InboundEmailService.Result(Outcome.CREATED, 8L));
+        assertThat(service.receive(email("jane@example.com", "Re: Invoice [#3]", "<m5@x>", List.of())))
+                .isEqualTo(new InboundEmailService.Result(Outcome.CREATED, 8L));
+    }
+
+    @Test
+    void someoneElseReplyingToATicket_opensANewTicketInstead() {
+        Ticket ticket = ticket(3, "jane@example.com");
+        when(ticketRepository.findById(3L)).thenReturn(Optional.of(ticket));
+        TicketDetail created = mock(TicketDetail.class);
+        when(created.id()).thenReturn(8L);
+        when(ticketService.openTicket(any(), any(), any(), any(), any())).thenReturn(created);
+
         InboundEmailService.Result result = service.receive(
-                email("mallory@example.com", "Re: Invoice [#3]", "<m4@x>", List.of()));
+                email("mallory@example.com", "Re: Invoice " + ticket.replyTag(), "<m4@x>", List.of()));
 
         assertThat(result).isEqualTo(new InboundEmailService.Result(Outcome.CREATED, 8L));
     }

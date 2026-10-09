@@ -5,24 +5,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Email settings ({@code app.email.*}). Secrets come from environment variables in application.properties;
  * never commit real values. Which outbound sender is active is chosen by {@code app.email.outbound}
- * ({@code smtp} or {@code log}), see SmtpEmailSender / LoggingEmailSender; {@code app.email.inbound=imap} turns on
- * the mailbox poller (otherwise only the webhook receives email).
+ * ({@code smtp} or {@code log}), see SmtpEmailSender / LoggingEmailSender. Inbound email arrives via Resend.
  */
 @ConfigurationProperties("app.email")
-public record EmailProperties(String supportAddress, String supportName, Webhook webhook, Imap imap,
-                              Resend resend) {
-
-    /** HTTP Basic credentials SendGrid must send to the inbound webhook (set in the Inbound Parse URL). */
-    public record Webhook(String username, String password) {
-    }
-
-    /**
-     * The support mailbox ImapMailboxPoller reads (active when {@code app.email.inbound=imap}). Every message in
-     * {@code folder} is imported, then moved to {@code processedFolder}.
-     */
-    public record Imap(String host, int port, boolean ssl, String username, String password, String folder,
-                       String processedFolder, int batchSize) {
-    }
+public record EmailProperties(String supportAddress, String supportName, Resend resend,
+                              boolean rejectReservedRecipients) {
 
     /**
      * Resend (resend.com) receiving: {@code webhookSecret} ("whsec_...") verifies the email.received webhook,

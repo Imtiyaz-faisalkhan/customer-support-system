@@ -20,8 +20,8 @@ class ResendWebhookVerifierTest {
 
     private static ResendWebhookVerifier verifierAt(long epochSecond, String secret) {
         return new ResendWebhookVerifier(
-                new EmailProperties("support@test.example", "Support", null, null,
-                        new EmailProperties.Resend("re_x", secret, null)),
+                new EmailProperties("support@test.example", "Support",
+                        new EmailProperties.Resend("re_x", secret, null), false),
                 Clock.fixed(Instant.ofEpochSecond(epochSecond), ZoneOffset.UTC));
     }
 

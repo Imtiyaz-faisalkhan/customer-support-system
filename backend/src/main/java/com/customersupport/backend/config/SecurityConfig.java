@@ -74,14 +74,15 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationEntryPoint entryPoint) throws Exception {
         http
-            // MVP-only: single local admin, SameSite cookie + CORS-locked origin is the baseline defense.
-            // Revisit (re-enable, token-based) before any non-local/public deployment.
+            // MVP trade-off: the session cookie is SameSite=Lax (application.properties), so browsers don't send it
+            // on cross-site POST/PATCH requests, and CORS only admits the app's own origins. Revisit (re-enable,
+            // token-based) before a real production deployment.
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(authorize -> authorize
-                // Email webhooks authenticate themselves: SendGrid via Basic creds, Resend via its signature.
-                .requestMatchers("/", "/api/ping", "/api/health", "/api/auth/login", "/api/webhooks/sendgrid/**",
-                        "/api/webhooks/resend").permitAll()
+                // The Resend webhook authenticates itself with a signature (ResendWebhookVerifier).
+                .requestMatchers("/", "/api/ping", "/api/health", "/api/auth/login", "/api/webhooks/resend")
+                .permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(handling -> handling.authenticationEntryPoint(entryPoint))

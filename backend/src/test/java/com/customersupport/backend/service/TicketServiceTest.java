@@ -8,6 +8,7 @@ import com.customersupport.backend.enums.MessageAuthor;
 import com.customersupport.backend.enums.TicketStatus;
 import com.customersupport.backend.exception.InvalidStatusTransitionException;
 import com.customersupport.backend.exception.TicketNotFoundException;
+import com.customersupport.backend.exception.UndeliverableRecipientException;
 import com.customersupport.backend.repository.TicketRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,7 @@ class TicketServiceTest {
     @BeforeEach
     void setUp() {
         service = new TicketService(ticketRepository, emailSender,
-                new EmailProperties("support@test.example", "Support", null, null, null));
+                new EmailProperties("support@test.example", "Support", null, false));
         ticket = new Ticket("jane@example.com", "Jane", "Billing question");
         ticket.addMessage(MessageAuthor.CUSTOMER, "Why was I charged twice?", Instant.parse("2026-01-01T00:00:00Z"));
     }
@@ -62,6 +63,21 @@ class TicketServiceTest {
         // Our Message-ID is on our domain and stored on the message, so the customer's reply can find this ticket.
         assertThat(sent.getValue().messageId()).matches("<[0-9a-f-]+@test\\.example>");
         assertThat(ticket.getMessages().getLast().getExternalMessageId()).isEqualTo(sent.getValue().messageId());
+        // The subject tag carries the ticket's random token, so a forged reply can't guess its way in.
+        assertThat(sent.getValue().subject()).isEqualTo("Re: Billing question " + ticket.replyTag());
+        assertThat(ticket.getReplyToken()).matches("[A-Z0-9]{8}");
+    }
+
+    @Test
+    void reply_toReservedTestAddress_isRefused_whenRealEmailIsOn() {
+        TicketService liveService = new TicketService(ticketRepository, emailSender,
+                new EmailProperties("support@test.example", "Support", null, true));
+        when(ticketRepository.findById(1L)).thenReturn(Optional.of(ticket));
+
+        assertThatThrownBy(() -> liveService.reply(1L, "Hello"))
+                .isInstanceOf(UndeliverableRecipientException.class);
+        assertThat(ticket.getMessages()).hasSize(1);
+        verifyNoInteractions(emailSender);
     }
 
     @Test

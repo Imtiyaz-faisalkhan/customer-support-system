@@ -28,7 +28,7 @@ class SmtpEmailSenderTest {
     void sendsFromSupportAddress_withOurThreadingHeaders() throws Exception {
         when(mailSender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));
         SmtpEmailSender sender = new SmtpEmailSender(mailSender,
-                new EmailProperties("support@test.example", "Acme Support", null, null, null));
+                new EmailProperties("support@test.example", "Acme Support", null, false));
 
         sender.send(new OutboundEmail("jane@example.com", "Re: Invoice [#3]", "Refunded.",
                 "<ours@test.example>", "<theirs@mail.example.com>", "<theirs@mail.example.com>"));

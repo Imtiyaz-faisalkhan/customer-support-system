@@ -97,7 +97,7 @@ class TicketIntegrationTest {
         ArgumentCaptor<OutboundEmail> sent = ArgumentCaptor.forClass(OutboundEmail.class);
         verify(emailSender).send(sent.capture());
         assertThat(sent.getValue().to()).isEqualTo("jane@example.com");
-        assertThat(sent.getValue().subject()).isEqualTo("Re: Billing question [#" + id + "]");
+        assertThat(sent.getValue().subject()).matches("Re: Billing question \\[#" + id + "-[A-Z0-9]{8}]");
         assertThat(sent.getValue().body()).isEqualTo("Refunded the duplicate.");
 
         mockMvc.perform(patch("/api/tickets/{id}/status", id).session(session)
