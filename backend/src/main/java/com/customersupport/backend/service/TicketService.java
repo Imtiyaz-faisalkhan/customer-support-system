@@ -5,6 +5,7 @@ import com.customersupport.backend.dto.MessageDto;
 import com.customersupport.backend.dto.OutboundEmail;
 import com.customersupport.backend.dto.PageResponse;
 import com.customersupport.backend.dto.TicketDetail;
+import com.customersupport.backend.dto.TicketOpenedEvent;
 import com.customersupport.backend.dto.TicketSummary;
 import com.customersupport.backend.entity.Ticket;
 import com.customersupport.backend.entity.TicketMessage;
@@ -15,6 +16,7 @@ import com.customersupport.backend.exception.InvalidStatusTransitionException;
 import com.customersupport.backend.exception.TicketNotFoundException;
 import com.customersupport.backend.exception.UndeliverableRecipientException;
 import com.customersupport.backend.repository.TicketRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,15 +44,19 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final EmailSender emailSender;
     private final EmailProperties emailProperties;
+    private final ApplicationEventPublisher events;
 
-    public TicketService(TicketRepository ticketRepository, EmailSender emailSender, EmailProperties emailProperties) {
+    public TicketService(TicketRepository ticketRepository, EmailSender emailSender, EmailProperties emailProperties,
+                         ApplicationEventPublisher events) {
         this.ticketRepository = ticketRepository;
         this.emailSender = emailSender;
         this.emailProperties = emailProperties;
+        this.events = events;
     }
 
     /**
-     * Creates a new OPEN ticket from an inbound customer email (see InboundEmailService).
+     * Creates a new OPEN ticket from an inbound customer email (see InboundEmailService). Once committed, it's
+     * categorized in the background (TicketCategorizationListener).
      *
      * @param externalMessageId the email's Message-ID, or null
      */
@@ -58,7 +64,24 @@ public class TicketService {
                                    String externalMessageId) {
         Ticket ticket = new Ticket(customerEmail, customerName, subject);
         ticket.addMessage(MessageAuthor.CUSTOMER, body, Instant.now(), externalMessageId);
-        return TicketDetail.from(ticketRepository.save(ticket));
+        TicketDetail created = TicketDetail.from(ticketRepository.save(ticket));
+        events.publishEvent(new TicketOpenedEvent(created.id()));
+        return created;
+    }
+
+    /** The AI's category; ignored if the ticket already has one (the admin may have set it in the meantime). */
+    public void applyAiCategory(Long ticketId, TicketCategory category) {
+        Ticket ticket = findTicket(ticketId);
+        if (ticket.getCategory() == null) {
+            ticket.setCategory(category);
+        }
+    }
+
+    /** The admin's choice, e.g. to correct the AI. */
+    public TicketSummary updateCategory(Long id, TicketCategory category) {
+        Ticket ticket = findTicket(id);
+        ticket.setCategory(category);
+        return TicketSummary.from(ticket);
     }
 
     /**

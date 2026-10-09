@@ -29,6 +29,8 @@ if [[ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_AGAIN" ]]; then
   exit 1
 fi
 
+read -r -s -p "Gemini API key for AI categorization (from Google AI Studio, empty = no AI): " GEMINI_API_KEY; echo
+
 case "$RESEND_API_KEY" in re_*) ;; *) echo "That doesn't look like a Resend API key (should start with re_)." >&2; exit 1 ;; esac
 case "$RESEND_WEBHOOK_SECRET" in whsec_*) ;; *) echo "The signing secret should start with whsec_." >&2; exit 1 ;; esac
 
@@ -39,6 +41,9 @@ export EMAIL_OUTBOUND=smtp
 export SMTP_HOST=smtp.resend.com SMTP_PORT=587 SMTP_AUTH=true SMTP_STARTTLS=true
 export SMTP_USERNAME=resend SMTP_PASSWORD="$RESEND_API_KEY"
 export APP_ADMIN_PASSWORD="$ADMIN_PASSWORD"
+if [[ -n "$GEMINI_API_KEY" ]]; then
+  export GEMINI_API_KEY AI_CHAT_PROVIDER=google-genai
+fi
 export PUBLIC_APP_URL="${PUBLIC_APP_URL:-${NGROK_URL:-}}"
 if [[ -z "$PUBLIC_APP_URL" ]]; then
   echo "Warning: NGROK_URL isn't set, so logging in through the tunnel will fail with 403 (localhost still works)." >&2
@@ -47,6 +52,6 @@ fi
 # (those bounce and hurt the sending domain's reputation).
 export DEMO_DATA_ENABLED=false REJECT_RESERVED_RECIPIENTS=true
 
-echo "Support address: ${ADDRESS} | receiving: Resend webhook | sending: smtp.resend.com"
+echo "Support address: ${ADDRESS} | receiving: Resend webhook | sending: smtp.resend.com | AI: ${AI_CHAT_PROVIDER:-off}"
 cd "$(dirname "$0")/../backend"
 exec ./mvnw spring-boot:run

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getTicket, replyToTicket, updateTicketStatus } from '../api/tickets.js'
+import { getTicket, replyToTicket, updateTicketCategory, updateTicketStatus } from '../api/tickets.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { CategoryBadge, StatusBadge } from '../components/TicketBadges.jsx'
 import {
   ADMIN_SETTABLE_STATUSES,
   AUTHOR_LABELS,
+  CATEGORY_LABELS,
   STATUS_LABELS,
   formatDateTime,
 } from '../utils/ticketLabels.js'
@@ -25,6 +26,7 @@ function TicketDetailPage() {
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [updatingCategory, setUpdatingCategory] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -64,6 +66,22 @@ function TicketDetailPage() {
       return
     } finally {
       setUpdatingStatus(false)
+    }
+    refreshQuietly()
+  }
+
+  // The AI sets the category when the ticket arrives; this lets the admin correct it.
+  const handleCategoryChange = async (category) => {
+    setActionError(null)
+    setUpdatingCategory(true)
+    try {
+      const summary = await updateTicketCategory(ticketId, category)
+      setTicket((current) => ({ ...current, ...summary }))
+    } catch (err) {
+      setActionError(err.message)
+      return
+    } finally {
+      setUpdatingCategory(false)
     }
     refreshQuietly()
   }
@@ -151,6 +169,25 @@ function TicketDetailPage() {
             </button>
           ))}
         </div>
+        <h2 className="section-label category-label">Category</h2>
+        <select
+          aria-label="Category"
+          className="category-select"
+          value={ticket.category ?? ''}
+          disabled={updatingCategory}
+          onChange={(event) => handleCategoryChange(event.target.value)}
+        >
+          {!ticket.category && (
+            <option value="" disabled>
+              Uncategorized
+            </option>
+          )}
+          {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {actionError && <p className="error-banner">{actionError}</p>}

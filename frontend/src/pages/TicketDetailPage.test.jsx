@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import TicketDetailPage from './TicketDetailPage.jsx'
-import { getTicket, replyToTicket, updateTicketStatus } from '../api/tickets.js'
+import { getTicket, replyToTicket, updateTicketCategory, updateTicketStatus } from '../api/tickets.js'
 import { useAuth } from '../context/AuthContext.jsx'
 
 vi.mock('../api/tickets.js', () => ({
   getTicket: vi.fn(),
   replyToTicket: vi.fn(),
   updateTicketStatus: vi.fn(),
+  updateTicketCategory: vi.fn(),
 }))
 
 vi.mock('../context/AuthContext.jsx', () => ({
@@ -79,6 +80,22 @@ describe('TicketDetailPage', () => {
     await act(async () => resolveStaleRefresh(ticket))
 
     expect(screen.getByText('On it.')).toBeInTheDocument()
+  })
+
+  it('lets the admin set the category of an uncategorized ticket', async () => {
+    const uncategorized = { ...ticket, category: null }
+    getTicket.mockResolvedValueOnce(uncategorized).mockResolvedValue({ ...uncategorized, category: 'BILLING' })
+    const { messages: _thread, ...summary } = uncategorized
+    updateTicketCategory.mockResolvedValue({ ...summary, category: 'BILLING' })
+    renderPage()
+    const select = await screen.findByLabelText('Category')
+    expect(screen.getAllByText('Uncategorized').length).toBeGreaterThan(0)
+
+    fireEvent.change(select, { target: { value: 'BILLING' } })
+
+    expect(updateTicketCategory).toHaveBeenCalledWith('7', 'BILLING')
+    await waitFor(() => expect(select).toHaveValue('BILLING'))
+    expect(document.querySelector('.badge.category-billing')).toHaveTextContent('Billing')
   })
 
   it('shows a sent reply even if the follow-up refresh fails', async () => {

@@ -33,6 +33,15 @@ export async function updateTicketStatus(id, status) {
   }
 }
 
+export async function updateTicketCategory(id, category) {
+  try {
+    const { data } = await api.patch(`/tickets/${id}/category`, { category })
+    return data
+  } catch (err) {
+    throw new Error(errorMessage(err, 'Could not update category'))
+  }
+}
+
 export async function replyToTicket(id, body) {
   try {
     const { data } = await api.post(`/tickets/${id}/replies`, { body })

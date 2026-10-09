@@ -5,6 +5,7 @@ import com.customersupport.backend.dto.PageResponse;
 import com.customersupport.backend.dto.ReplyRequest;
 import com.customersupport.backend.dto.TicketDetail;
 import com.customersupport.backend.dto.TicketSummary;
+import com.customersupport.backend.dto.UpdateCategoryRequest;
 import com.customersupport.backend.dto.UpdateStatusRequest;
 import com.customersupport.backend.enums.TicketCategory;
 import com.customersupport.backend.enums.TicketStatus;
@@ -53,6 +54,11 @@ public class TicketController {
     @PatchMapping("/{id}/status")
     public TicketSummary updateStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest request) {
         return ticketService.updateStatus(id, request.status());
+    }
+
+    @PatchMapping("/{id}/category")
+    public TicketSummary updateCategory(@PathVariable Long id, @Valid @RequestBody UpdateCategoryRequest request) {
+        return ticketService.updateCategory(id, request.category());
     }
 
     @PostMapping("/{id}/replies")

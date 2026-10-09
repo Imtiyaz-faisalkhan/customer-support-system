@@ -158,4 +158,24 @@ class TicketIntegrationTest {
         mockMvc.perform(get("/api/tickets").param("status", "NOT_A_STATUS").session(session))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void adminCanChangeTheCategory() throws Exception {
+        Long id = ticketService.openTicket("jane@example.com", "Jane", "Invoice", "Need a copy", null).id();
+
+        mockMvc.perform(patch("/api/tickets/{id}/category", id).session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"BILLING\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.category").value("BILLING"));
+
+        mockMvc.perform(patch("/api/tickets/{id}/category", id).session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"SHIPPING\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(patch("/api/tickets/{id}/category", id).session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
 }

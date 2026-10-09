@@ -236,7 +236,8 @@
   margin-bottom: 12px;
 }
 
-.filters select {
+.filters select,
+.category-select {
   font: inherit;
   font-size: 13px;
   padding: 6px 8px;
@@ -404,6 +405,10 @@
   color: #4b5563;
   margin: 0 0 8px;
   line-height: 1.4;
+}
+
+.category-label {
+  margin-top: 16px;
 }
 
 .status-options {
