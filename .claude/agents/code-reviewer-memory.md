@@ -38,6 +38,11 @@ Working notes carried across review sessions. Read at the start of every review,
 - Pattern: "keep previous response, tag with period/query" state in pages. Watch the error path (stale data shown undimmed under a new label) and races between multiple un-cancelled refetches.
 - Flagged 2026-10 (Resend review): default admin pw usable over tunnel; Vite dev server public; ResendClient no timeouts; null Message-ID breaks dedupe; From-spoofing vs [#id] guard; stale EMAIL_INBOUND export; demo seeder on in Resend mode; parser leftover Function indirection. Check status next review.
 
+- AI categorization (2026-10, commit eea4d2a): Spring AI 2.0.1 google-genai; TicketOpenedEvent -> @Async @TransactionalEventListener(AFTER_COMMIT) listener -> TicketCategorizer -> applyAiCategory (null-only). Settled, don't flag: no tests for AI categorizer/listener, no backfill/retry, categorization doesn't change status.
+- Spring AI 2.0.1 google-genai props: `spring.ai.google.genai.chat.<opt>` is current; `chat.options.<opt>` is deprecated (verified in jar metadata). Retry via core RetryTemplate.
+- Ticket has no @Version/@DynamicUpdate: Hibernate UPDATE writes every column (seen in test SQL log), so concurrent short transactions can lost-update each other.
+- Flagged 2026-10 (AI review): model in application.properties (gemini-3.8-flash) != docs/commit (gemini-2.5-flash); EMAIL_SETUP privacy claim overstated (signatures in body); AI applyAiCategory full-row lost update; script AI toggle leaks from earlier shell export. Check status next review.
+
 ## Environment facts
 
 - Live JVM zone is UTC+2 (CEST); dashboard `from` shows 22:00Z. Seeded live DB had 9 demo tickets (@example.com) and is the same DB the Resend run uses; ticket 6 is the AI->customer follow-up->PENDING_HUMAN case.

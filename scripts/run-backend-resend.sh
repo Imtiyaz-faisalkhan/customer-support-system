@@ -43,6 +43,10 @@ export SMTP_USERNAME=resend SMTP_PASSWORD="$RESEND_API_KEY"
 export APP_ADMIN_PASSWORD="$ADMIN_PASSWORD"
 if [[ -n "$GEMINI_API_KEY" ]]; then
   export GEMINI_API_KEY AI_CHAT_PROVIDER=google-genai
+else
+  # Explicitly off, even if AI_CHAT_PROVIDER was exported earlier in this terminal.
+  unset GEMINI_API_KEY
+  export AI_CHAT_PROVIDER=none
 fi
 export PUBLIC_APP_URL="${PUBLIC_APP_URL:-${NGROK_URL:-}}"
 if [[ -z "$PUBLIC_APP_URL" ]]; then

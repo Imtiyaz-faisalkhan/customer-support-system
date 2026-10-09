@@ -16,7 +16,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -36,16 +35,13 @@ class TicketServiceTest {
     @Mock
     private EmailSender emailSender;
 
-    @Mock
-    private ApplicationEventPublisher events;
-
     private TicketService service;
     private Ticket ticket;
 
     @BeforeEach
     void setUp() {
         service = new TicketService(ticketRepository, emailSender,
-                new EmailProperties("support@test.example", "Support", null, false), events);
+                new EmailProperties("support@test.example", "Support", null, false));
         ticket = new Ticket("jane@example.com", "Jane", "Billing question");
         ticket.addMessage(MessageAuthor.CUSTOMER, "Why was I charged twice?", Instant.parse("2026-01-01T00:00:00Z"));
     }
@@ -75,7 +71,7 @@ class TicketServiceTest {
     @Test
     void reply_toReservedTestAddress_isRefused_whenRealEmailIsOn() {
         TicketService liveService = new TicketService(ticketRepository, emailSender,
-                new EmailProperties("support@test.example", "Support", null, true), events);
+                new EmailProperties("support@test.example", "Support", null, true));
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(ticket));
 
         assertThatThrownBy(() -> liveService.reply(1L, "Hello"))

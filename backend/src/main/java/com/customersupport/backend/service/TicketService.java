@@ -5,7 +5,6 @@ import com.customersupport.backend.dto.MessageDto;
 import com.customersupport.backend.dto.OutboundEmail;
 import com.customersupport.backend.dto.PageResponse;
 import com.customersupport.backend.dto.TicketDetail;
-import com.customersupport.backend.dto.TicketOpenedEvent;
 import com.customersupport.backend.dto.TicketSummary;
 import com.customersupport.backend.entity.Ticket;
 import com.customersupport.backend.entity.TicketMessage;
@@ -16,7 +15,6 @@ import com.customersupport.backend.exception.InvalidStatusTransitionException;
 import com.customersupport.backend.exception.TicketNotFoundException;
 import com.customersupport.backend.exception.UndeliverableRecipientException;
 import com.customersupport.backend.repository.TicketRepository;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,37 +42,30 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final EmailSender emailSender;
     private final EmailProperties emailProperties;
-    private final ApplicationEventPublisher events;
 
-    public TicketService(TicketRepository ticketRepository, EmailSender emailSender, EmailProperties emailProperties,
-                         ApplicationEventPublisher events) {
+    public TicketService(TicketRepository ticketRepository, EmailSender emailSender, EmailProperties emailProperties) {
         this.ticketRepository = ticketRepository;
         this.emailSender = emailSender;
         this.emailProperties = emailProperties;
-        this.events = events;
+    }
+
+    public TicketDetail openTicket(String customerEmail, String customerName, String subject, String body,
+                                   String externalMessageId) {
+        return openTicket(customerEmail, customerName, subject, body, externalMessageId, null);
     }
 
     /**
-     * Creates a new OPEN ticket from an inbound customer email (see InboundEmailService). Once committed, it's
-     * categorized in the background (TicketCategorizationListener).
+     * Creates a new OPEN ticket from an inbound customer email (see InboundEmailService).
      *
      * @param externalMessageId the email's Message-ID, or null
+     * @param category          the AI's category, or null if the AI is off or couldn't decide
      */
     public TicketDetail openTicket(String customerEmail, String customerName, String subject, String body,
-                                   String externalMessageId) {
+                                   String externalMessageId, TicketCategory category) {
         Ticket ticket = new Ticket(customerEmail, customerName, subject);
+        ticket.setCategory(category);
         ticket.addMessage(MessageAuthor.CUSTOMER, body, Instant.now(), externalMessageId);
-        TicketDetail created = TicketDetail.from(ticketRepository.save(ticket));
-        events.publishEvent(new TicketOpenedEvent(created.id()));
-        return created;
-    }
-
-    /** The AI's category; ignored if the ticket already has one (the admin may have set it in the meantime). */
-    public void applyAiCategory(Long ticketId, TicketCategory category) {
-        Ticket ticket = findTicket(ticketId);
-        if (ticket.getCategory() == null) {
-            ticket.setCategory(category);
-        }
+        return TicketDetail.from(ticketRepository.save(ticket));
     }
 
     /** The admin's choice, e.g. to correct the AI. */

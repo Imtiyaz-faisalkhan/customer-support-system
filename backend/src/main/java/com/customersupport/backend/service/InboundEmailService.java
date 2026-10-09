@@ -4,12 +4,12 @@ import com.customersupport.backend.config.EmailProperties;
 import com.customersupport.backend.dto.InboundEmail;
 import com.customersupport.backend.entity.Ticket;
 import com.customersupport.backend.entity.TicketMessage;
+import com.customersupport.backend.enums.TicketCategory;
 import com.customersupport.backend.repository.TicketMessageRepository;
 import com.customersupport.backend.repository.TicketRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -17,10 +17,11 @@ import java.util.regex.Pattern;
 
 /**
  * Decides what an inbound customer email becomes: a new ticket, a reply on an existing ticket, or nothing
- * (duplicate delivery, auto-reply, our own mail). All ticket writes go through TicketService.
+ * (duplicate delivery, auto-reply, our own mail). All ticket writes go through TicketService, each in its own
+ * transaction. Deliberately not @Transactional itself: a new ticket is categorized by AI first, and that call
+ * (seconds) must not hold a database connection.
  */
 @Service
-@Transactional
 public class InboundEmailService {
 
     public enum Outcome { CREATED, APPENDED, DUPLICATE, IGNORED }
@@ -35,13 +36,16 @@ public class InboundEmailService {
     private final TicketRepository ticketRepository;
     private final TicketMessageRepository messageRepository;
     private final EmailProperties emailProperties;
+    private final TicketCategorizer categorizer;
 
     public InboundEmailService(TicketService ticketService, TicketRepository ticketRepository,
-                               TicketMessageRepository messageRepository, EmailProperties emailProperties) {
+                               TicketMessageRepository messageRepository, EmailProperties emailProperties,
+                               TicketCategorizer categorizer) {
         this.ticketService = ticketService;
         this.ticketRepository = ticketRepository;
         this.messageRepository = messageRepository;
         this.emailProperties = emailProperties;
+        this.categorizer = categorizer;
     }
 
     public Result receive(InboundEmail email) {
@@ -64,8 +68,10 @@ public class InboundEmailService {
             ticketService.appendCustomerReply(ticketId, email.body(), email.messageId());
             return new Result(Outcome.APPENDED, ticketId);
         }
+        // Categorized before it's created, so the ticket never shows up as Uncategorized unless the AI is off or fails.
+        TicketCategory category = categorizer.categorize(email.subject(), email.body()).orElse(null);
         Long ticketId = ticketService.openTicket(email.fromAddress(), email.fromName(), email.subject(),
-                email.body(), email.messageId()).id();
+                email.body(), email.messageId(), category).id();
         return new Result(Outcome.CREATED, ticketId);
     }
 

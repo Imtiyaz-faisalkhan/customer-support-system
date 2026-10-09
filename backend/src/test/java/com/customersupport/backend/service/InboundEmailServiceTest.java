@@ -39,12 +39,15 @@ class InboundEmailServiceTest {
     @Mock
     private TicketMessageRepository messageRepository;
 
+    @Mock
+    private TicketCategorizer categorizer;
+
     private InboundEmailService service;
 
     @BeforeEach
     void setUp() {
         service = new InboundEmailService(ticketService, ticketRepository, messageRepository,
-                new EmailProperties("support@test.example", "Support", null, false));
+                new EmailProperties("support@test.example", "Support", null, false), categorizer);
     }
 
     private static InboundEmail email(String from, String subject, String messageId, List<String> threadIds) {
@@ -61,7 +64,7 @@ class InboundEmailServiceTest {
     void newEmail_opensATicket() {
         TicketDetail created = mock(TicketDetail.class);
         when(created.id()).thenReturn(7L);
-        when(ticketService.openTicket("jane@example.com", "Jane", "Invoice", "Hello", "<m1@x>")).thenReturn(created);
+        when(ticketService.openTicket("jane@example.com", "Jane", "Invoice", "Hello", "<m1@x>", null)).thenReturn(created);
 
         InboundEmailService.Result result = service.receive(email("jane@example.com", "Invoice", "<m1@x>", List.of()));
 
@@ -98,7 +101,7 @@ class InboundEmailServiceTest {
         when(ticketRepository.findById(3L)).thenReturn(Optional.of(ticket(3, "jane@example.com")));
         TicketDetail created = mock(TicketDetail.class);
         when(created.id()).thenReturn(8L);
-        when(ticketService.openTicket(any(), any(), any(), any(), any())).thenReturn(created);
+        when(ticketService.openTicket(any(), any(), any(), any(), any(), any())).thenReturn(created);
 
         // Ticket ids are sequential; without the token a forged sender can't target a ticket.
         assertThat(service.receive(email("jane@example.com", "Re: Invoice [#3-AAAAAAAA]", "<m4@x>", List.of())))
@@ -113,7 +116,7 @@ class InboundEmailServiceTest {
         when(ticketRepository.findById(3L)).thenReturn(Optional.of(ticket));
         TicketDetail created = mock(TicketDetail.class);
         when(created.id()).thenReturn(8L);
-        when(ticketService.openTicket(any(), any(), any(), any(), any())).thenReturn(created);
+        when(ticketService.openTicket(any(), any(), any(), any(), any(), any())).thenReturn(created);
 
         InboundEmailService.Result result = service.receive(
                 email("mallory@example.com", "Re: Invoice " + ticket.replyTag(), "<m4@x>", List.of()));
